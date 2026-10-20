@@ -1,0 +1,10 @@
+[Unit]
+Description=Run auto-hunter every 3 hours
+
+[Timer]
+OnCalendar=*-*-* 00/3:15:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,79 @@
+"""Command-line entry point: `auto-hunter collect | report | history | market`."""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+from auto_hunter import report
+from auto_hunter.collectors import SautoCollector
+from auto_hunter.config import load_profiles, load_settings
+from auto_hunter.db import Database
+from auto_hunter.notify import send_alerts
+from auto_hunter.pipeline import collect
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="auto-hunter")
+    parser.add_argument("--config-dir", type=Path, default=Path("config"))
+    parser.add_argument("-v", "--verbose", action="store_true")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_collect = sub.add_parser("collect", help="Fetch listings and record changes")
+    p_collect.add_argument("--profile", action="append", help="Only run these profiles")
+    p_collect.add_argument("--no-alerts", action="store_true")
+
+    p_report = sub.add_parser("report", help="New, changed and removed listings")
+    p_report.add_argument("--days", type=float, default=1)
+
+    p_history = sub.add_parser("history", help="Price history of one listing")
+    p_history.add_argument("source_id")
+
+    sub.add_parser("market", help="Asking-price spread per profile and year")
+
+    args = parser.parse_args(argv)
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    # Windows consoles default to a legacy codepage that can't print Czech text.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    load_dotenv()
+    settings = load_settings(args.config_dir / "settings.yaml")
+    db = Database(settings.database_path)
+    try:
+        if args.command == "collect":
+            profiles = load_profiles(args.config_dir / "search_profiles.yaml")
+            if args.profile:
+                profiles = [p for p in profiles if p.name in args.profile]
+                if not profiles:
+                    parser.error(f"No matching profiles: {args.profile}")
+            collector = SautoCollector(settings.http, settings.collection)
+            try:
+                summary = collect(db, collector, profiles, settings)
+            finally:
+                collector.close()
+            logging.info("Run done: seen=%d new=%d changed=%d removed=%d errors=%d",
+                         summary.seen, summary.new, summary.changed, summary.removed,
+                         len(summary.errors))
+            if not args.no_alerts:
+                send_alerts(summary.alerts)
+            return 1 if summary.errors and not summary.seen else 0
+        if args.command == "report":
+            print(report.changes_report(db, args.days))
+        elif args.command == "history":
+            print(report.history_report(db, args.source_id))
+        elif args.command == "market":
+            print(report.market_report(db))
+        return 0
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,21 @@
+database_path: data/auto_hunter.db
+
+http:
+  # Identify ourselves honestly and stay slow: this is a personal tool.
+  user_agent: "auto-hunter/0.1 (personal used-car monitor)"
+  request_delay_s: 1.5
+  timeout_s: 20
+  max_retries: 3
+
+collection:
+  page_size: 100
+  # Hard cap per model query, protects against a too-broad profile.
+  max_results_per_query: 2000
+  # Detail requests (description, VIN, body, ...) for newly seen listings per run.
+  max_detail_fetches: 300
+  # Requests to confirm whether listings that vanished from search were removed.
+  max_removal_checks: 200
+
+alerts:
+  # Alert when a tracked listing's price drops by at least this fraction.
+  min_price_drop_pct: 3

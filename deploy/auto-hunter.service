@@ -1,0 +1,11 @@
+[Unit]
+Description=auto-hunter: collect used-car listings
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Adjust to your user and checkout location.
+User=jan
+WorkingDirectory=/home/jan/auto-hunter
+ExecStart=/home/jan/.local/bin/uv run auto-hunter collect
