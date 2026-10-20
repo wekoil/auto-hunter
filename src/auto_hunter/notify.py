@@ -30,7 +30,23 @@ def format_alert(alert: Alert) -> str:
             l.fuel, l.gearbox, l.district, l.seller_type,
         ] if s
     )
-    return f"{head}\n{l.title}\n{specs}\n[{', '.join(alert.profiles)}] {l.url}"
+    a = alert.assessment
+    head += f" · {a.price_tier or 'no tier'} · confidence {a.confidence}"
+    lines = [head, l.title, specs]
+    identity = " · ".join(
+        s for s in [
+            a.generation or (" / ".join(a.generation_candidates) if a.generation_candidates else None),
+            (f"{a.engine} ({a.engine_status})" if a.engine
+             else " / ".join(a.engine_candidates) if a.engine_candidates else None),
+        ] if s
+    )
+    if identity:
+        lines.append(identity)
+    for f in a.flags:
+        if not f.code.startswith("tier_"):
+            lines.append(("⚠️ " if f.severity == "caution" else "ℹ️ ") + f.message)
+    lines.append(f"[{', '.join(alert.profiles)}] {l.url}")
+    return "\n".join(lines)
 
 
 def send_alerts(alerts: list[Alert]) -> None:

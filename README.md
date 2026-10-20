@@ -14,17 +14,40 @@ uv sync
 cp .env.example .env          # optional: Telegram credentials
 ```
 
-Edit [config/search_profiles.yaml](config/search_profiles.yaml) to describe the cars
-you're interested in. Tune request pacing and limits in [config/settings.yaml](config/settings.yaml).
+## Configuration
+
+The config is split into three layers plus a knowledge base:
+
+| File | Layer | What it holds |
+|---|---|---|
+| [requirements.yaml](config/requirements.yaml) | Global requirements | Petrol, estate, budget, hard mileage cap, excluded keywords |
+| [profiles.yaml](config/profiles.yaml) | Vehicle profiles | Which generations/engines to look for, priority |
+| [evaluation.yaml](config/evaluation.yaml) | Evaluation rules | Price tiers, preferred mileage, confidence thresholds |
+| [catalog.yaml](config/catalog.yaml) | Knowledge base | Generations (years, title hints, engines) and engines (specs, reliability status, notes) |
+
+[settings.yaml](config/settings.yaml) holds request pacing, limits and the database path.
+
+Sauto can't filter by generation or engine family, so each listing is classified
+locally: the catalog lists which (generation, engine) pairs exist for a model, and the
+listing's year, title hints, displacement, power and turbo keywords eliminate the ones
+that don't fit. If one pair remains, the car is identified; if several do, it is
+flagged as unclear (e.g. "1.4 TSI EA111 or EA211") rather than guessed.
+
+Profiles only drop a car when its specs rule it out. Unknown engines are kept
+and flagged. Evaluation never hides anything: it adds a price tier, flags (cautions such
+as an EA111 engine or high mileage, uncertainties such as a missing VIN) and a confidence
+level. After editing the catalog or evaluation rules, run `auto-hunter reassess`.
 
 ## Usage
 
 ```bash
 uv run auto-hunter collect              # fetch, store changes, send alerts
-uv run auto-hunter collect --profile golf-vii
+uv run auto-hunter collect --profile A-octavia3-1.6mpi
+uv run auto-hunter shortlist            # active listings, most promising first
 uv run auto-hunter report --days 7      # new / changed / removed listings
-uv run auto-hunter market               # asking-price spread per profile and year
-uv run auto-hunter history 211125480    # price history of one listing
+uv run auto-hunter market               # asking-price spread per generation and engine
+uv run auto-hunter history 211125480    # price history and assessment of one listing
+uv run auto-hunter reassess             # re-label stored listings after config edits
 ```
 
 The first `collect` for a profile builds the baseline and sends no "new listing"
@@ -35,14 +58,16 @@ alerts; later runs alert on genuinely new listings and on price drops of at leas
 
 1. **Search** – each profile's make/model, price, mileage, fuel, gearbox and body
    filters are sent to Sauto's JSON API (`/api/v1/items/search`, allowed by robots.txt).
-2. **Local filters** – year range and title keywords (e.g. "havarovaný") are applied
-   locally; the API has no year filter.
+2. **Local filters and classification** – year range, title keywords (e.g. "havarovaný"),
+   generation and engine are checked locally. Identical queries from several profiles
+   are fetched once.
 3. **Details** – newly seen listings get one detail request (description, VIN, power,
-   body, service book). Listings whose details don't fit (e.g. wrong body type) are
-   stored as `unmatched` so they aren't fetched again.
+   body, service book), then are re-classified with the better data. Listings whose
+   details don't fit (e.g. wrong engine) are stored as `unmatched` so they aren't
+   fetched again.
 4. **History** – `listings` holds each listing's current state and the original source
    payload (`raw_json`); `listing_snapshots` gets a row whenever price, mileage or
-   status changes.
+   status changes; `listing_assessments` holds the derived labels.
 5. **Removals** – after a complete, error-free run, tracked listings that no longer
    appear are checked individually: gone → `removed`; still online but outside the
    filters → `unmatched`. A removed listing is not necessarily sold: it may have been

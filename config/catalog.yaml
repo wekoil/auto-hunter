@@ -1,0 +1,211 @@
+# Vehicle knowledge base: generations and engines, used to classify listings locally
+# (Sauto has no generation filter) and to attach reliability notes.
+#
+# Engine status:  preferred | ok | caution | unvetted | avoid
+#   avoid: listings identified as this engine are rejected; if it's only one of the
+#   possibilities, the listing is kept with a warning to confirm the engine code.
+# Notes are starting points for the research phase, not verified conclusions.
+# Edit freely, then run `auto-hunter reassess` to re-label stored listings.
+#
+# Generations: years are inclusive manufacturing years of the ESTATE version; adjacent
+# generations overlap in changeover years on purpose. title_hints are regexes matched
+# against the lowercased, diacritics-free title. A listing's generation is resolved from
+# year, title hints and which engines that generation actually had.
+
+generations:
+  octavia-2:
+    label: Škoda Octavia II (1Z)
+    models: [skoda:octavia]
+    years: [2004, 2013]
+    title_hints: ['octavia,?\s*(ii|2)\b(?![.,]\d)', '\b1z\b']
+    engines: [ea113-1.6-mpi, ea111-1.2-tsi, ea111-1.4-tsi, ea888-1.8-tsi-early]
+
+  octavia-3:
+    label: Škoda Octavia III (5E)
+    models: [skoda:octavia]
+    years: [2013, 2020]
+    title_hints: ['octavia,?\s*(iii|3)\b(?![.,]\d)', '\b5e\b']
+    engines: [ea211-1.0-tsi, ea211-1.2-tsi, ea211-1.4-tsi, ea211-1.5-tsi, ea211-1.6-mpi,
+              ea888-1.8-tsi, ea888-2.0-tsi]
+
+  octavia-4:
+    label: Škoda Octavia IV (NX)
+    models: [skoda:octavia]
+    years: [2020, null]
+    title_hints: ['octavia,?\s*(iv|4)\b(?![.,]\d)']
+    engines: [ea211-1.0-tsi, ea211-1.5-tsi, ea888-2.0-tsi]
+
+  golf-5:
+    label: VW Golf V Variant
+    models: [volkswagen:golf, volkswagen:golf-variant]
+    years: [2007, 2009]
+    title_hints: ['golf\s*(variant\s*)?(v|5)\b(?![.,]\d)']
+    engines: [ea113-1.6-mpi, ea111-1.4-tsi]
+
+  golf-6:
+    label: VW Golf VI Variant
+    models: [volkswagen:golf, volkswagen:golf-variant]
+    years: [2009, 2013]
+    title_hints: ['golf\s*(variant\s*)?(vi|6)\b(?![.,]\d)']
+    engines: [ea113-1.6-mpi, ea111-1.2-tsi, ea111-1.4-tsi]
+
+  golf-7:
+    label: VW Golf VII Variant
+    models: [volkswagen:golf, volkswagen:golf-variant]
+    years: [2013, 2020]
+    title_hints: ['golf\s*(variant\s*)?(vii|7)\b(?![.,]\d)']
+    engines: [ea211-1.0-tsi, ea211-1.2-tsi, ea211-1.4-tsi, ea211-1.5-tsi, ea211-1.6-mpi]
+
+  golf-8:
+    label: VW Golf VIII Variant
+    models: [volkswagen:golf, volkswagen:golf-variant]
+    years: [2020, null]
+    title_hints: ['golf\s*(variant\s*)?(viii|8)\b(?![.,]\d)']
+    engines: [ea211-1.0-tsi, ea211-1.5-tsi]
+
+  focus-2:
+    label: Ford Focus II Kombi
+    models: [ford:focus]
+    years: [2004, 2011]
+    title_hints: ['focus\s*(ii|2|mk\s*2)\b(?![.,]\d)']
+    engines: [ford-1.6-tivct]
+
+  focus-3:
+    label: Ford Focus III Kombi
+    models: [ford:focus]
+    years: [2011, 2018]
+    title_hints: ['focus\s*(iii|3|mk\s*3)\b(?![.,]\d)']
+    engines: [ford-1.6-tivct, ford-1.0-ecoboost, ford-1.5-ecoboost, ford-1.6-ecoboost]
+
+  focus-4:
+    label: Ford Focus IV Kombi
+    models: [ford:focus]
+    years: [2018, null]
+    title_hints: ['focus\s*(iv|4|mk\s*4)\b(?![.,]\d)']
+    engines: [ford-1.0-ecoboost, ford-1.5-ecoboost]
+
+engines:
+  # --- VW group -------------------------------------------------------------------
+  ea211-1.6-mpi:
+    label: 1.6 MPI (EA211)
+    liters: 1.6
+    power_kw: [81]
+    turbo: false
+    status: preferred
+    notes: Naturally aspirated, timing belt, no turbo or direct injection.
+
+  ea113-1.6-mpi:
+    label: 1.6 MPI (EA113)
+    liters: 1.6
+    power_kw: [75]
+    turbo: false
+    status: preferred
+    notes: Older naturally aspirated 8-valve engine with timing belt; simple and widely regarded as durable. Verify belt replacement.
+
+  ea211-1.4-tsi:
+    label: 1.4 TSI (EA211)
+    liters: 1.4
+    power_kw: [90, 92, 103, 110]
+    turbo: true
+    status: ok
+    notes: Belt-driven successor to the EA111. Verify engine code and belt service.
+    automatic_note: &dq200 Automatic is most likely the 7-speed dry-clutch DSG (DQ200), which has a mixed reliability record. Ask for gearbox service history.
+
+  ea111-1.4-tsi:
+    label: 1.4 TSI (EA111)
+    liters: 1.4
+    power_kw: [90, 118, 125]
+    turbo: true
+    status: avoid
+    notes: Excluded. Timing-chain stretch/tensioner and piston problems are widely reported on EA111 1.4 TSI.
+    automatic_note: *dq200
+
+  ea211-1.2-tsi:
+    label: 1.2 TSI (EA211)
+    liters: 1.2
+    power_kw: [63, 77, 81]
+    turbo: true
+    status: ok
+    notes: Belt-driven 4-cylinder.
+    automatic_note: *dq200
+
+  ea111-1.2-tsi:
+    label: 1.2 TSI (EA111)
+    liters: 1.2
+    power_kw: [63, 77]
+    turbo: true
+    status: avoid
+    notes: Excluded. Chain-driven; timing-chain stretch widely reported.
+    automatic_note: *dq200
+
+  ea211-1.0-tsi:
+    label: 1.0 TSI (EA211)
+    liters: 1.0
+    power_kw: [81, 85]
+    turbo: true
+    status: unvetted
+    automatic_note: *dq200
+
+  ea211-1.5-tsi:
+    label: 1.5 TSI (EA211 evo)
+    liters: 1.5
+    power_kw: [96, 110]
+    turbo: true
+    status: unvetted
+    automatic_note: *dq200
+
+  ea888-1.8-tsi:
+    label: 1.8 TSI (EA888 gen 3)
+    liters: 1.8
+    power_kw: [132]
+    turbo: true
+    status: unvetted
+
+  ea888-1.8-tsi-early:
+    label: 1.8 TSI (EA888 early)
+    liters: 1.8
+    power_kw: [112, 118]
+    turbo: true
+    status: caution
+    notes: Early EA888 versions have widely reported excessive oil consumption.
+
+  ea888-2.0-tsi:
+    label: 2.0 TSI (EA888)
+    liters: 2.0
+    power_kw: [140, 162, 169, 180, 182, 195]
+    turbo: true
+    status: unvetted
+    notes: Performance-oriented (mostly RS); outside your priorities.
+
+  # --- Ford -----------------------------------------------------------------------
+  ford-1.6-tivct:
+    label: 1.6 Ti-VCT
+    liters: 1.6
+    power_kw: [63, 77, 85, 92]
+    turbo: false
+    status: ok
+    notes: Naturally aspirated Sigma engine with timing belt. Verify belt history.
+    automatic_note: In the Focus III the automatic is usually the PowerShift dual-clutch, which has a poor reliability record. Focus II used a conventional automatic.
+
+  ford-1.0-ecoboost:
+    label: 1.0 EcoBoost
+    liters: 1.0
+    power_kw: [63, 74, 92]
+    turbo: true
+    status: caution
+    notes: 3-cylinder turbo with oil-immersed timing belt; early versions had reported cooling-system/overheating problems. Check recalls and service history.
+
+  ford-1.5-ecoboost:
+    label: 1.5 EcoBoost
+    liters: 1.5
+    power_kw: [110, 132, 134]
+    turbo: true
+    status: unvetted
+
+  ford-1.6-ecoboost:
+    label: 1.6 EcoBoost
+    liters: 1.6
+    power_kw: [110, 134]
+    turbo: true
+    status: caution
+    notes: Overheating-related problems and recalls reported. Check recall completion.

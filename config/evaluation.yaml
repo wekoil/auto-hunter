@@ -1,0 +1,13 @@
+# Layer 3: evaluation rules. These never hide a listing; they label it so you can judge it.
+
+price_tiers:
+  - {max: 100000, label: budget, note: "Budget opportunity"}
+  - {max: 150000, label: target, note: "Primary target range"}
+  - {max: 200000, label: stretch, note: "Above normal budget: needs a convincing reason"}
+
+# Above this, a listing gets a caution flag instead of being excluded.
+preferred_mileage_max: 180000
+
+# Confidence drops with each unresolved uncertainty (generation, engine, VIN, service history).
+# 0 → high, up to this many → medium, more → low.
+medium_confidence_max_uncertainties: 2

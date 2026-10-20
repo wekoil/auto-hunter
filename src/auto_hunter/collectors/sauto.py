@@ -30,6 +30,8 @@ class SautoCollector(Collector):
             timeout=http.timeout_s,
         )
         self._last_request = 0.0
+        # Profiles often share a query (same model, same global filters); fetch it once.
+        self._query_cache: dict[tuple, tuple[list[dict[str, Any]], bool]] = {}
 
     def close(self) -> None:
         self._client.close()
@@ -38,30 +40,47 @@ class SautoCollector(Collector):
         listings: dict[str, Listing] = {}
         complete = True
         for make_model in profile.models:
-            params = build_search_params(profile, make_model)
-            offset = 0
-            while True:
-                data = self._get_json(
-                    "/api/v1/items/search",
-                    {**params, "limit": self._collection.page_size, "offset": offset},
-                )
-                results = data.get("results") or []
-                total = data.get("pagination", {}).get("total", 0)
-                for item in results:
-                    listing = parse_item(item)
-                    # Sorting by date can shift items between pages mid-scan; dedupe by id.
-                    listings[listing.source_id] = listing
-                offset += len(results)
-                if not results or offset >= total:
-                    break
-                if offset >= self._collection.max_results_per_query:
-                    log.warning(
-                        "%s/%s: %d results exceed cap of %d, narrow the profile",
-                        profile.name, make_model, total, self._collection.max_results_per_query,
-                    )
-                    complete = False
-                    break
+            items, query_complete = self._query(build_search_params(profile, make_model))
+            complete &= query_complete
+            for item in items:
+                listing = parse_item(item)
+                listings[listing.source_id] = listing
         return SearchResult(list(listings.values()), complete)
+
+    def _query(self, params: dict[str, Any]) -> tuple[list[dict[str, Any]], bool]:
+        key = tuple(sorted(params.items()))
+        if key in self._query_cache:
+            return self._query_cache[key]
+        make_model = params["manufacturer_model_seo"]
+        # Sorting by date can shift items between pages mid-scan; dedupe by id.
+        items: dict[Any, dict[str, Any]] = {}
+        complete = True
+        offset = 0
+        while True:
+            data = self._get_json(
+                "/api/v1/items/search",
+                {**params, "limit": self._collection.page_size, "offset": offset},
+            )
+            results = data.get("results") or []
+            total = data.get("pagination", {}).get("total", 0)
+            for item in results:
+                if _model_key(item) != make_model:
+                    # Sauto silently ignores unknown model names and returns the whole make.
+                    raise CollectorError(
+                        f"Sauto doesn't recognise model {make_model!r} (got "
+                        f"{_model_key(item)!r}); check the name in the sauto.cz URL"
+                    )
+                items[item["id"]] = item
+            offset += len(results)
+            if not results or offset >= total:
+                break
+            if offset >= self._collection.max_results_per_query:
+                log.warning("%s: %d results exceed cap of %d, narrow the profile",
+                            make_model, total, self._collection.max_results_per_query)
+                complete = False
+                break
+        self._query_cache[key] = (list(items.values()), complete)
+        return self._query_cache[key]
 
     def fetch(self, source_id: str) -> Listing | None:
         data = self._get_json(f"/api/v1/items/{source_id}", allow_404=True)
@@ -120,6 +139,10 @@ def _seo(cb: dict[str, Any] | None) -> str | None:
     return cb.get("seo_name") if cb else None
 
 
+def _model_key(item: dict[str, Any]) -> str:
+    return f"{_seo(item.get('manufacturer_cb'))}:{_seo(item.get('model_cb'))}"
+
+
 def parse_item(item: dict[str, Any], has_details: bool = False) -> Listing:
     manufacturer = item.get("manufacturer_cb") or {}
     model = item.get("model_cb") or {}
@@ -136,6 +159,7 @@ def parse_item(item: dict[str, Any], has_details: bool = False) -> Listing:
         price_czk=None if item.get("price_by_agreement") else item.get("price"),
         make=manufacturer.get("name"),
         model=model.get("name"),
+        model_key=_model_key(item),
         variant=item.get("additional_model_name"),
         year=int(manufacturing_date[:4]) if manufacturing_date else None,
         manufacturing_date=manufacturing_date,

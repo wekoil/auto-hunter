@@ -25,6 +25,7 @@ SAUTO_ITEM = {
 def test_parse_sauto_search_item():
     l = parse_item(SAUTO_ITEM)
     assert l.source_id == "211125480"
+    assert l.model_key == "volkswagen:golf-sportsvan"
     assert l.url == "https://www.sauto.cz/osobni/detail/volkswagen/golf-sportsvan/211125480"
     assert (l.make, l.model, l.year, l.mileage_km, l.price_czk) == (
         "Volkswagen", "Golf Sportsvan", 2014, 134000, 229000)
@@ -75,3 +76,39 @@ def test_filters():
     assert rejection_reason(_l(title="Octavia HAVAROVANY"), p) is not None
     assert rejection_reason(_l(variant="1.6 TDI - na dily"), p) is not None
     assert rejection_reason(_l(title="Octavia nehavarovaný, 1. majitel"), p) is None
+
+
+def _collector(items_by_model):
+    import httpx
+
+    from auto_hunter.collectors.sauto import SautoCollector
+    from auto_hunter.config import CollectionSettings, HttpSettings
+
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.params["manufacturer_model_seo"])
+        items = items_by_model(request.url.params["manufacturer_model_seo"])
+        return httpx.Response(200, json={"pagination": {"total": len(items)}, "results": items})
+
+    c = SautoCollector(HttpSettings(request_delay_s=0), CollectionSettings())
+    c._client = httpx.Client(base_url="https://x", transport=httpx.MockTransport(handler))
+    return c, calls
+
+
+def test_sauto_rejects_silently_ignored_model():
+    import pytest
+
+    from auto_hunter.collectors.base import CollectorError
+
+    c, _ = _collector(lambda m: [SAUTO_ITEM])  # returns a Golf Sportsvan for anything
+    with pytest.raises(CollectorError, match="doesn't recognise"):
+        c.search(SearchProfile(name="x", models=["kia:ceed"]))
+
+
+def test_sauto_shares_identical_queries_between_profiles():
+    c, calls = _collector(lambda m: [SAUTO_ITEM])
+    p1 = SearchProfile(name="a", models=["volkswagen:golf-sportsvan"], price_max=200000)
+    p2 = SearchProfile(name="b", models=["volkswagen:golf-sportsvan"], price_max=200000)
+    assert len(c.search(p1).listings) == len(c.search(p2).listings) == 1
+    assert calls == ["volkswagen:golf-sportsvan"]

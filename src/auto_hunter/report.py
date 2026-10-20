@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import statistics
 from datetime import datetime, timedelta, timezone
 
+from auto_hunter.config import PRIORITIES, Config
 from auto_hunter.db import Database
 
 
@@ -59,37 +61,59 @@ def history_report(db: Database, source_id: str) -> str:
         f"{listing['year']}  {listing['mileage_km']} km  {listing['power_kw']} kW  "
         f"{listing['fuel']}  {listing['gearbox']}  {listing['body']}  VIN: {listing['vin'] or '-'}",
         f"first seen {listing['first_seen_at']}, last seen {listing['last_seen_at']}",
-        "",
     ]
+    a = db.conn.execute(
+        "SELECT data FROM listing_assessments WHERE listing_id = ?", (listing["id"],)
+    ).fetchone()
+    if a:
+        a = json.loads(a["data"])
+        out.append(
+            f"generation: {a['generation'] or ' / '.join(a['generation_candidates']) or '?'}  "
+            f"engine: {a['engine'] or ' / '.join(a['engine_candidates']) or '?'}  "
+            f"tier: {a['price_tier']}  confidence: {a['confidence']}"
+        )
+        out.extend(f"  [{f['severity']}] {f['message']}" for f in a["flags"])
+    out.append("")
     for s in snaps:
         out.append(f"{s['observed_at']}  {s['event']:<11} {_fmt_price(s['price_czk'])} Kč  "
                    f"{_fmt_km(s['mileage_km'])} km")
     return "\n".join(out)
 
 
-def market_report(db: Database) -> str:
-    """Per profile and year: count and asking-price spread of active listings."""
+def _quartiles(values: list[int]) -> tuple[int, int, int]:
+    if len(values) < 2:
+        return values[0], values[0], values[0]
+    q = statistics.quantiles(values, n=4)
+    return int(q[0]), int(q[1]), int(q[2])
+
+
+def market_report(db: Database, config: Config) -> str:
+    """Asking-price spread of active listings per generation and engine."""
     rows = db.conn.execute(
-        """SELECT lp.profile, l.year, l.price_czk, l.mileage_km
-           FROM listings l JOIN listing_profiles lp ON lp.listing_id = l.id
-           WHERE l.status = 'active' AND l.price_czk IS NOT NULL
-           ORDER BY lp.profile, l.year"""
+        """SELECT l.model, l.year, l.price_czk, l.mileage_km, a.generation, a.engine
+           FROM listings l JOIN listing_assessments a ON a.listing_id = l.id
+           WHERE l.status = 'active' AND l.price_czk IS NOT NULL"""
     ).fetchall()
     if not rows:
         return "No active listings yet. Run `auto-hunter collect` first."
-    groups: dict[tuple[str, int | None], list] = {}
+    cat = config.catalog
+    groups: dict[tuple[str, str], list] = {}
     for r in rows:
-        groups.setdefault((r["profile"], r["year"]), []).append(r)
-    out = [f"{'profile':<22}{'year':>5}{'n':>5}{'p25':>11}{'median':>11}{'p75':>11}{'med km':>10}"]
-    for (profile, year), items in groups.items():
-        prices = sorted(i["price_czk"] for i in items)
+        gen = cat.generations[r["generation"]].label if r["generation"] else f"{r['model']} (gen ?)"
+        eng = cat.engines[r["engine"]].label if r["engine"] else "engine ?"
+        groups.setdefault((gen, eng), []).append(r)
+    out = [f"{'generation':<28}{'engine':<22}{'n':>4}{'p25':>10}{'median':>10}{'p75':>10}"
+           f"{'med yr':>7}{'med km':>9}"]
+    for (gen, eng), items in sorted(groups.items()):
+        p25, med, p75 = _quartiles(sorted(i["price_czk"] for i in items))
+        years = [i["year"] for i in items if i["year"]]
         kms = [i["mileage_km"] for i in items if i["mileage_km"] is not None]
-        q = statistics.quantiles(prices, n=4) if len(prices) >= 2 else [prices[0]] * 3
         out.append(
-            f"{profile:<22}{year or '?':>5}{len(prices):>5}{_fmt_price(int(q[0])):>11}"
-            f"{_fmt_price(int(q[1])):>11}{_fmt_price(int(q[2])):>11}"
-            f"{_fmt_km(int(statistics.median(kms))) if kms else '?':>10}"
+            f"{gen[:27]:<28}{eng[:21]:<22}{len(items):>4}{_fmt_price(p25):>10}{_fmt_price(med):>10}"
+            f"{_fmt_price(p75):>10}{int(statistics.median(years)) if years else '?':>7}"
+            f"{_fmt_km(int(statistics.median(kms))) if kms else '?':>9}"
         )
+    out.append("\nAdvertised prices only; actual selling prices are typically lower.")
     runs = db.conn.execute(
         "SELECT started_at, status, seen, new, changed, removed FROM collection_runs "
         "ORDER BY id DESC LIMIT 5"
@@ -98,4 +122,56 @@ def market_report(db: Database) -> str:
     for r in runs:
         out.append(f"  {r['started_at']}  {r['status']:<8} seen={r['seen']} new={r['new']} "
                    f"changed={r['changed']} removed={r['removed']}")
+    return "\n".join(out)
+
+
+_CONFIDENCE_ORDER = {"high": 0, "medium": 1, "low": 2}
+
+
+def shortlist_report(db: Database, config: Config, limit: int = 25,
+                     profile: str | None = None) -> str:
+    """Active listings ordered by profile priority, confidence, cautions, then price.
+
+    A transparent ordering, not a score: weighted scoring needs market comparables
+    and researched reliability data first.
+    """
+    rows = db.conn.execute(
+        """SELECT l.*, a.data AS assessment, GROUP_CONCAT(lp.profile) AS profiles
+           FROM listings l
+           JOIN listing_assessments a ON a.listing_id = l.id
+           JOIN listing_profiles lp ON lp.listing_id = l.id
+           WHERE l.status = 'active'
+           GROUP BY l.id"""
+    ).fetchall()
+    priority_of = {p.name: PRIORITIES.index(p.priority) for p in config.profiles}
+    entries = []
+    for r in rows:
+        profiles = r["profiles"].split(",")
+        if profile and profile not in profiles:
+            continue
+        a = json.loads(r["assessment"])
+        cautions = [f for f in a["flags"] if f["severity"] == "caution"]
+        best_priority = min((priority_of.get(p, len(PRIORITIES)) for p in profiles))
+        key = (best_priority, _CONFIDENCE_ORDER[a["confidence"]], len(cautions),
+               r["price_czk"] if r["price_czk"] is not None else 10**9)
+        entries.append((key, r, a, cautions, profiles))
+    if not entries:
+        return "No active listings match."
+    entries.sort(key=lambda e: e[0])
+    cat = config.catalog
+    out = []
+    for _, r, a, cautions, profiles in entries[:limit]:
+        gen = cat.generations[a["generation"]].label if a["generation"] else "gen ?"
+        eng = (f"{cat.engines[a['engine']].label} [{a['engine_status']}]" if a["engine"]
+               else "engine ?")
+        out.append(
+            f"{_fmt_price(r['price_czk'])} Kč  {a['price_tier'] or '-':<8} {r['year'] or '?'}  "
+            f"{_fmt_km(r['mileage_km'])} km  conf={a['confidence']:<6} {r['title']}\n"
+            f"    {gen} · {eng} · {r['gearbox'] or '?'} · {r['district'] or '?'} · "
+            f"{','.join(profiles)}"
+        )
+        for f in cautions:
+            out.append(f"    ⚠ {f['message']}")
+        out.append(f"    {r['url']}")
+    out.append(f"\n{len(entries)} active listings; showing {min(limit, len(entries))}.")
     return "\n".join(out)

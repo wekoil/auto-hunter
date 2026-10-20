@@ -1,0 +1,53 @@
+# Layer 2: vehicle profiles. What to look for; global requirements (petrol, estate,
+# budget) are inherited from requirements.yaml.
+#
+# generations: ids from catalog.yaml; they determine which Sauto models are searched
+#              and the default year range. A listing must plausibly be one of them.
+# engines:     ids from catalog.yaml; if set, listings whose engine is known to be
+#              something else are dropped. Unknown/unclear engines are kept and flagged.
+# models:      extra Sauto "make:model" names searched without generation logic.
+# priority:    high | medium | exploratory (ordering in the shortlist)
+#
+# The same car can match several profiles; it is stored once.
+
+profiles:
+  - name: A-octavia3-1.6mpi
+    priority: high
+    generations: [octavia-3]
+    engines: [ea211-1.6-mpi]
+
+  - name: B-golf-variant-1.6mpi
+    priority: high
+    # In practice mostly Golf V/VI Variant (EA113); 1.6 MPI was rare in the Golf VII Variant.
+    generations: [golf-5, golf-6, golf-7]
+    engines: [ea113-1.6-mpi, ea211-1.6-mpi]
+
+  - name: C-golf-variant-1.4tsi
+    priority: high
+    # EA211 only. Golf V/VI 1.4 TSI is EA111 (status: avoid), so only the Golf VII qualifies;
+    # changeover-year cars that might be EA111 are kept with a warning.
+    generations: [golf-7]
+    engines: [ea211-1.4-tsi]
+
+  - name: D-octavia3-other-petrol
+    priority: medium
+    generations: [octavia-3]
+    engines: [ea211-1.0-tsi, ea211-1.2-tsi, ea211-1.4-tsi, ea211-1.5-tsi, ea888-1.8-tsi]
+
+  - name: E-focus-estate
+    priority: medium
+    generations: [focus-2, focus-3, focus-4]
+    year_min: 2008   # 1.6 Ti-VCT arrived in the Focus II around 2008
+    engines: [ford-1.6-tivct, ford-1.0-ecoboost, ford-1.5-ecoboost, ford-1.6-ecoboost]
+
+  - name: F-alternatives
+    priority: exploratory
+    # No engine catalog yet: every engine is flagged "not yet vetted".
+    models:
+      - toyota:auris        # Touring Sports (estate only exists from 2013)
+      - toyota:avensis      # a bit larger than the Octavia; worth a look
+      - hyundai:i30
+      - kia:cee-d
+      - kia:cee-d-sw
+      - opel:astra
+    year_min: 2010

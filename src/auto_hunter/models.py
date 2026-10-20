@@ -15,6 +15,8 @@ class Listing:
     price_czk: int | None
     make: str | None = None
     model: str | None = None
+    # Source-specific "make:model" key used by profiles and the catalog, e.g. "skoda:octavia".
+    model_key: str | None = None
     variant: str | None = None
     year: int | None = None
     manufacturing_date: str | None = None

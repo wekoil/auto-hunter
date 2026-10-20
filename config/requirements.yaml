@@ -1,0 +1,11 @@
+# Layer 1: global requirements. Apply to every profile; a profile may only narrow them
+# (price_max, mileage_max, exclude_keywords can be overridden per profile).
+
+fuel: [benzin]            # petrol only (Sauto "hybridni" is a separate fuel type)
+body: [kombi]             # estate; note Sauto also tags MPVs as kombi, so profiles pick models
+price_max: 200000         # extended budget; see price tiers in evaluation.yaml
+# Hard cap only. Higher mileage is flagged, not rejected, up to this point
+# (preferred limit is in evaluation.yaml).
+mileage_max: 250000
+# Matched at word starts in the title, case/diacritics-insensitive.
+exclude_keywords: ["havarovan", "bourany", "na díly", "poškozen", "bez stk", "nepojízdn"]

@@ -7,6 +7,7 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
+from auto_hunter.evaluate import Assessment
 from auto_hunter.models import Listing
 
 SCHEMA = """
@@ -19,6 +20,7 @@ CREATE TABLE IF NOT EXISTS listings (
     price_czk          INTEGER,
     make               TEXT,
     model              TEXT,
+    model_key          TEXT,
     variant            TEXT,
     year               INTEGER,
     manufacturing_date TEXT,
@@ -71,6 +73,17 @@ CREATE TABLE IF NOT EXISTS listing_profiles (
     PRIMARY KEY (listing_id, profile)
 );
 
+-- Derived labels (generation, engine, flags). Recomputable from listings + catalog.
+CREATE TABLE IF NOT EXISTS listing_assessments (
+    listing_id  INTEGER PRIMARY KEY REFERENCES listings(id),
+    generation  TEXT,
+    engine      TEXT,
+    price_tier  TEXT,
+    confidence  TEXT NOT NULL,
+    data        TEXT NOT NULL,  -- full Assessment as JSON
+    assessed_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS collection_runs (
     id          INTEGER PRIMARY KEY,
     started_at  TEXT NOT NULL,
@@ -85,7 +98,7 @@ CREATE TABLE IF NOT EXISTS collection_runs (
 """
 
 _LISTING_FIELDS = [
-    "url", "title", "price_czk", "make", "model", "variant", "year", "manufacturing_date",
+    "url", "title", "price_czk", "make", "model", "model_key", "variant", "year", "manufacturing_date",
     "mileage_km", "fuel", "gearbox", "power_kw", "engine_cc", "body", "vin", "seller_type",
     "seller_name", "region", "district", "municipality", "description", "service_book",
     "first_owner", "source_created_at",
@@ -94,6 +107,21 @@ _LISTING_FIELDS = [
 DETAIL_ONLY_FIELDS = {
     "power_kw", "engine_cc", "body", "vin", "description", "service_book", "first_owner",
 }
+
+
+def row_to_listing(row: sqlite3.Row) -> Listing:
+    """Rebuild a Listing from stored state (for re-assessment without refetching)."""
+    values = {f: row[f] for f in _LISTING_FIELDS}
+    for f in ("service_book", "first_owner"):
+        if values[f] is not None:
+            values[f] = bool(values[f])
+    return Listing(
+        source=row["source"], source_id=row["source_id"], **values,
+        image_urls=json.loads(row["image_urls"]),
+        is_active=row["status"] != "removed",
+        has_details=row["details_fetched_at"] is not None,
+        raw=json.loads(row["raw_json"]),
+    )
 
 
 @dataclass
@@ -112,6 +140,18 @@ class Database:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Add columns introduced after a database was created."""
+        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(listings)")}
+        if "model_key" not in cols:
+            self.conn.execute("ALTER TABLE listings ADD COLUMN model_key TEXT")
+            self.conn.execute(
+                "UPDATE listings SET model_key = json_extract(raw_json, '$.manufacturer_cb.seo_name')"
+                " || ':' || json_extract(raw_json, '$.model_cb.seo_name') WHERE source = 'sauto'"
+            )
+            self.conn.commit()
 
     def close(self) -> None:
         self.conn.close()
@@ -194,6 +234,18 @@ class Database:
                ON CONFLICT (listing_id, profile) DO UPDATE SET last_seen_at = excluded.last_seen_at""",
             (listing_id, profile, now, now),
         )
+
+    def save_assessment(self, listing_id: int, assessment: Assessment, now: str) -> None:
+        self.conn.execute(
+            """INSERT OR REPLACE INTO listing_assessments
+               (listing_id, generation, engine, price_tier, confidence, data, assessed_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (listing_id, assessment.generation, assessment.engine, assessment.price_tier,
+             assessment.confidence, json.dumps(assessment.to_dict(), ensure_ascii=False), now),
+        )
+
+    def all_listings(self) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM listings").fetchall()
 
     def known_profiles(self) -> set[str]:
         return {r[0] for r in self.conn.execute("SELECT DISTINCT profile FROM listing_profiles")}

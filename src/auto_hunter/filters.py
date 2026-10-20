@@ -3,23 +3,21 @@
 from __future__ import annotations
 
 import re
-import unicodedata
 
-from auto_hunter.config import SearchProfile
+from auto_hunter.classify import Classification, fold
+from auto_hunter.config import Catalog, SearchProfile
 from auto_hunter.models import Listing
 
 
-def _fold(text: str) -> str:
-    """Lowercase and strip diacritics so 'Havarovaný' matches 'havarovan'."""
-    decomposed = unicodedata.normalize("NFKD", text.lower())
-    return "".join(c for c in decomposed if not unicodedata.combining(c))
-
-
-def rejection_reason(listing: Listing, profile: SearchProfile) -> str | None:
+def rejection_reason(listing: Listing, profile: SearchProfile,
+                     cls: Classification | None = None,
+                     catalog: Catalog | None = None) -> str | None:
     """Return why the listing doesn't fit the profile, or None if it fits.
 
     Unknown values pass: a missing field is a question for the seller, not a reason to drop.
     """
+    if listing.model_key and listing.model_key not in profile.models:
+        return f"model {listing.model_key}"
     if listing.price_czk is not None:
         if profile.price_max is not None and listing.price_czk > profile.price_max:
             return "price above max"
@@ -44,8 +42,21 @@ def rejection_reason(listing: Listing, profile: SearchProfile) -> str | None:
         return f"body {listing.body}"
     # Only the title/variant, and only at a word start: descriptions and titles often
     # say "nehavarovaný" (not crashed), which must not match "havarovan".
-    headline = _fold(f"{listing.title} {listing.variant or ''}")
+    headline = fold(f"{listing.title} {listing.variant or ''}")
     for kw in profile.exclude_keywords:
-        if re.search(r"\b" + re.escape(_fold(kw)), headline):
+        if re.search(r"\b" + re.escape(fold(kw)), headline):
             return f"keyword {kw!r}"
+
+    if cls is not None:
+        if profile.generations and not set(cls.generations) & set(profile.generations):
+            return "generation " + ("/".join(cls.generations) or "outside catalog years")
+        # Only reject on engine when the specs actually rule the profile's engines out.
+        if profile.engines and cls.engine_known:
+            if cls.engine_uncataloged or not set(cls.engines) & set(profile.engines):
+                return "engine " + ("/".join(cls.engines) or "not in profile")
+        # Engines you never want: reject only when every remaining candidate is one.
+        if catalog is not None and cls.engines and all(
+            catalog.engines[e].status == "avoid" for e in cls.engines
+        ):
+            return "avoided engine " + "/".join(cls.engines)
     return None

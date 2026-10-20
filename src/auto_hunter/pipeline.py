@@ -6,9 +6,11 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from auto_hunter.classify import classify
 from auto_hunter.collectors.base import Collector, CollectorError
-from auto_hunter.config import SearchProfile, Settings
-from auto_hunter.db import DETAIL_ONLY_FIELDS, Database
+from auto_hunter.config import Config, SearchProfile, Settings
+from auto_hunter.db import DETAIL_ONLY_FIELDS, Database, row_to_listing
+from auto_hunter.evaluate import Assessment, assess
 from auto_hunter.filters import rejection_reason
 from auto_hunter.models import Listing
 
@@ -24,6 +26,7 @@ class Alert:
     kind: str  # "new" | "price_drop"
     listing: Listing
     profiles: list[str]
+    assessment: Assessment
     old_price: int | None = None
 
 
@@ -37,8 +40,10 @@ class RunSummary:
     alerts: list[Alert] = field(default_factory=list)
 
 
-def collect(db: Database, collector: Collector, profiles: list[SearchProfile],
-            settings: Settings) -> RunSummary:
+def collect(db: Database, collector: Collector, config: Config,
+            profiles: list[SearchProfile] | None = None) -> RunSummary:
+    profiles = config.profiles if profiles is None else profiles
+    settings, catalog = config.settings, config.catalog
     now = utcnow()
     run_id = db.start_run(now)
     summary = RunSummary()
@@ -57,7 +62,7 @@ def collect(db: Database, collector: Collector, profiles: list[SearchProfile],
         complete &= result.complete
         kept = 0
         for listing in result.listings:
-            if rejection_reason(listing, profile) is None:
+            if rejection_reason(listing, profile, classify(listing, catalog), catalog) is None:
                 matched.setdefault(listing.source_id, (listing, []))[1].append(profile.name)
                 kept += 1
         log.info("%s: %d found, %d kept after local filters", profile.name,
@@ -83,8 +88,10 @@ def collect(db: Database, collector: Collector, profiles: list[SearchProfile],
             if detailed is not None:
                 listing = detailed
 
-        # Details reveal body, description etc.; re-check what the search couldn't.
-        profile_names = [n for n in profile_names if rejection_reason(listing, by_name[n]) is None]
+        # Details reveal body, engine specs etc.; re-check what the search couldn't.
+        cls = classify(listing, catalog)
+        profile_names = [n for n in profile_names
+                         if rejection_reason(listing, by_name[n], cls, catalog) is None]
         if not profile_names:
             # Remember it as unmatched so we don't pay for its details again next run.
             if existing is None or existing["status"] == "active":
@@ -97,14 +104,17 @@ def collect(db: Database, collector: Collector, profiles: list[SearchProfile],
         res = db.upsert_listing(listing, now)
         for name in profile_names:
             db.link_profile(res.listing_id, name, now)
+        assessment = assess(listing, cls, catalog, config.evaluation)
+        db.save_assessment(res.listing_id, assessment, now)
         if res.event == "new":
             summary.new += 1
             if established.intersection(profile_names):
-                summary.alerts.append(Alert("new", listing, profile_names))
+                summary.alerts.append(Alert("new", listing, profile_names, assessment))
         elif res.event in ("changed", "reactivated"):
             summary.changed += 1
             if _is_price_drop(res.old_price, res.new_price, settings.alerts.min_price_drop_pct):
-                summary.alerts.append(Alert("price_drop", listing, profile_names, res.old_price))
+                summary.alerts.append(
+                    Alert("price_drop", listing, profile_names, assessment, res.old_price))
         db.commit()
 
     if complete:
@@ -146,3 +156,15 @@ def _check_vanished(db: Database, collector: Collector, seen_ids: set[str], now:
 
 def _is_price_drop(old: int | None, new: int | None, min_pct: float) -> bool:
     return old is not None and new is not None and old > 0 and (old - new) / old * 100 >= min_pct
+
+
+def reassess(db: Database, config: Config) -> int:
+    """Re-label every stored listing, e.g. after editing catalog.yaml or evaluation.yaml."""
+    now = utcnow()
+    rows = db.all_listings()
+    for row in rows:
+        listing = row_to_listing(row)
+        cls = classify(listing, config.catalog)
+        db.save_assessment(row["id"], assess(listing, cls, config.catalog, config.evaluation), now)
+    db.commit()
+    return len(rows)
