@@ -5,6 +5,10 @@ Three layers plus a knowledge base:
 - profiles.yaml:     vehicle profiles (generations, engines, model-specific limits)
 - evaluation.yaml:   rules that label listings (price tiers, mileage preference, confidence)
 - catalog.yaml:      generations and engines with reliability status/notes
+plus settings.yaml for technical settings (HTTP pacing, limits, database path).
+
+`load_config` is the entry point. It validates cross-references (profile → generation →
+engine) up front, so a typo in YAML fails at startup instead of silently matching nothing.
 """
 
 from __future__ import annotations
@@ -19,6 +23,8 @@ import yaml
 
 @dataclass
 class HttpSettings:
+    """How the collector talks to the marketplace. Keep it slow and identifiable."""
+
     user_agent: str = "auto-hunter/0.1 (personal used-car monitor)"
     request_delay_s: float = 1.5
     timeout_s: float = 20
@@ -27,19 +33,25 @@ class HttpSettings:
 
 @dataclass
 class CollectionSettings:
+    """Per-run request budgets; whatever exceeds a budget is picked up by the next run."""
+
     page_size: int = 100
-    max_results_per_query: int = 2000
-    max_detail_fetches: int = 300
-    max_removal_checks: int = 200
+    max_results_per_query: int = 2000  # safety cap for one model query
+    max_detail_fetches: int = 300      # detail requests for newly seen listings
+    max_removal_checks: int = 200      # requests confirming that vanished listings are gone
 
 
 @dataclass
 class AlertSettings:
+    """When to notify about changes to already-known listings."""
+
     min_price_drop_pct: float = 3
 
 
 @dataclass
 class Settings:
+    """settings.yaml: technical settings, independent of what car you want."""
+
     database_path: Path = Path("data/auto_hunter.db")
     http: HttpSettings = field(default_factory=HttpSettings)
     collection: CollectionSettings = field(default_factory=CollectionSettings)
@@ -48,6 +60,11 @@ class Settings:
 
 @dataclass
 class Requirements:
+    """requirements.yaml: global requirements, merged into every profile.
+
+    Values use Sauto's SEO names (fuel "benzin", body "kombi", ...).
+    """
+
     fuel: list[str] = field(default_factory=list)
     body: list[str] = field(default_factory=list)
     price_max: int | None = None
@@ -55,28 +72,38 @@ class Requirements:
     exclude_keywords: list[str] = field(default_factory=list)
 
 
+# preferred/ok: no flag; caution: flagged with its notes; unvetted: flagged as not yet
+# researched; avoid: rejected when certain, flagged when only possible.
 ENGINE_STATUSES = ("preferred", "ok", "caution", "unvetted", "avoid")
 
 
 @dataclass
 class Engine:
+    """catalog.yaml engine: the specs used to recognise it, plus your verdict on it."""
+
     id: str
     label: str
-    liters: float
-    power_kw: list[int]
-    turbo: bool
+    liters: float          # compared with displacement rounded to 0.1 l
+    power_kw: list[int]    # every output it was sold with; matched with ±3 kW tolerance
+    turbo: bool            # compared with title keywords (TSI/EcoBoost vs MPI/Ti-VCT)
     status: str = "unvetted"
     notes: str = ""
-    automatic_note: str = ""
+    automatic_note: str = ""  # extra caution shown when the car is an automatic
 
 
 @dataclass
 class Generation:
+    """catalog.yaml generation of a model, e.g. Octavia III.
+
+    Sauto has no generation field, so classify.py infers it from the listing's year,
+    title (title_hints regexes) and which engines this generation was sold with.
+    """
+
     id: str
     label: str
-    models: list[str]
+    models: list[str]      # Sauto "make:model" keys this generation is listed under
     year_from: int
-    year_to: int | None
+    year_to: int | None    # None = still in production
     title_hints: list[str] = field(default_factory=list)
     engines: list[str] = field(default_factory=list)
 
@@ -86,15 +113,20 @@ class Generation:
 
 @dataclass
 class Catalog:
+    """catalog.yaml: the knowledge base of generations and engines, keyed by id."""
+
     generations: dict[str, Generation] = field(default_factory=dict)
     engines: dict[str, Engine] = field(default_factory=dict)
 
     def generations_for(self, model_key: str | None) -> list[Generation]:
+        """Generations listed under a Sauto model; empty for models not in the catalog."""
         return [g for g in self.generations.values() if model_key in g.models]
 
 
 @dataclass
 class PriceTier:
+    """A price band; a listing gets the first tier whose max it doesn't exceed."""
+
     max: int
     label: str
     note: str = ""
@@ -102,6 +134,8 @@ class PriceTier:
 
 @dataclass
 class EvaluationRules:
+    """evaluation.yaml: rules that label listings. They never reject anything."""
+
     price_tiers: list[PriceTier] = field(default_factory=list)
     preferred_mileage_max: int | None = None
     medium_confidence_max_uncertainties: int = 2
@@ -132,6 +166,8 @@ PRIORITIES = ("high", "medium", "exploratory")
 
 @dataclass
 class Config:
+    """Everything loaded from the config directory."""
+
     settings: Settings
     requirements: Requirements
     catalog: Catalog
@@ -144,6 +180,7 @@ def _read(path: Path) -> dict[str, Any]:
 
 
 def load_settings(path: Path) -> Settings:
+    """Read settings.yaml; missing keys keep their defaults."""
     data = _read(path)
     return Settings(
         database_path=Path(data.get("database_path", Settings.database_path)),
@@ -154,6 +191,7 @@ def load_settings(path: Path) -> Settings:
 
 
 def load_catalog(path: Path) -> Catalog:
+    """Read catalog.yaml, validating statuses, title-hint regexes and engine references."""
     data = _read(path)
     engines = {eid: Engine(id=eid, **e) for eid, e in (data.get("engines") or {}).items()}
     for e in engines.values():
@@ -173,12 +211,20 @@ def load_catalog(path: Path) -> Catalog:
 
 
 def load_evaluation(path: Path) -> EvaluationRules:
+    """Read evaluation.yaml; price tiers are sorted by their max."""
     data = _read(path)
     tiers = sorted((PriceTier(**t) for t in data.pop("price_tiers", [])), key=lambda t: t.max)
     return EvaluationRules(price_tiers=tiers, **data)
 
 
 def resolve_profile(raw: dict[str, Any], req: Requirements, catalog: Catalog) -> SearchProfile:
+    """Turn one profiles.yaml entry into a SearchProfile.
+
+    - models: the generations' Sauto models plus any listed explicitly
+    - year range: spans the generations unless the profile sets year_min/year_max
+    - price/mileage caps: the profile's own, else the global ones (never above the budget)
+    - fuel/body: global; exclude_keywords: global plus the profile's own
+    """
     raw = dict(raw)
     name = raw.pop("name")
     gen_ids = raw.pop("generations", [])
@@ -228,6 +274,7 @@ def resolve_profile(raw: dict[str, Any], req: Requirements, catalog: Catalog) ->
 
 
 def load_config(config_dir: Path) -> Config:
+    """Load and validate the whole config directory. Raises ValueError on mistakes."""
     settings = load_settings(config_dir / "settings.yaml")
     requirements = Requirements(**_read(config_dir / "requirements.yaml"))
     catalog = load_catalog(config_dir / "catalog.yaml")

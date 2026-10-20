@@ -8,6 +8,13 @@ from typing import Any
 
 @dataclass
 class Listing:
+    """One advertisement, normalized. Collectors produce it; everything else consumes it.
+
+    Units: price in CZK, mileage in km, power in kW, displacement in cc.
+    Enumerations (fuel, gearbox, body) use Sauto SEO names, e.g. "benzin", "manualni".
+    None always means "the listing doesn't say", never "no".
+    """
+
     source: str
     source_id: str
     url: str

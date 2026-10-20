@@ -1,4 +1,16 @@
-"""Collector for sauto.cz via its public JSON API (robots.txt allows /api/)."""
+"""Collector for sauto.cz via its public JSON API (robots.txt allows /api/).
+
+Endpoints (undocumented, observed from the website):
+- GET /api/v1/items/search  paginated search; filters below in build_search_params
+- GET /api/v1/items/{id}    full listing (description, VIN, power, body, status);
+                            404 once the listing is gone
+
+Quirks handled here:
+- unknown model names are silently ignored (you get the whole make), so results
+  are checked against the requested model
+- no year/generation filter, so those are applied locally
+- dealer-feed listings may only have in_operation_date (first registration)
+"""
 
 from __future__ import annotations
 
@@ -19,6 +31,8 @@ PASSENGER_CARS_CATEGORY = 838
 
 
 class SautoCollector(Collector):
+    """Sauto.cz collector. One instance per run: its query cache lives as long as it does."""
+
     source = "sauto"
 
     def __init__(self, http: HttpSettings, collection: CollectionSettings) -> None:
@@ -48,6 +62,7 @@ class SautoCollector(Collector):
         return SearchResult(list(listings.values()), complete)
 
     def _query(self, params: dict[str, Any]) -> tuple[list[dict[str, Any]], bool]:
+        """All raw items for one model query, paging through results; cached per run."""
         key = tuple(sorted(params.items()))
         if key in self._query_cache:
             return self._query_cache[key]
@@ -91,6 +106,11 @@ class SautoCollector(Collector):
     def _get_json(
         self, path: str, params: dict[str, Any] | None = None, allow_404: bool = False
     ) -> Any:
+        """GET with pacing and retries.
+
+        Waits request_delay_s between requests. Retries network errors, 429 and 5xx
+        with exponential backoff; other 4xx fail immediately. Raises CollectorError.
+        """
         for attempt in range(1, self._http.max_retries + 1):
             wait = self._http.request_delay_s - (time.monotonic() - self._last_request)
             if wait > 0:
@@ -114,6 +134,10 @@ class SautoCollector(Collector):
 
 
 def build_search_params(profile: SearchProfile, make_model: str) -> dict[str, Any]:
+    """Translate a profile into Sauto search filters for one model (used cars only).
+
+    Multi-value filters are comma-separated, e.g. fuel_seo=benzin,nafta.
+    """
     params: dict[str, Any] = {
         "category_id": PASSENGER_CARS_CATEGORY,
         "manufacturer_model_seo": make_model,
@@ -144,6 +168,10 @@ def _model_key(item: dict[str, Any]) -> str:
 
 
 def parse_item(item: dict[str, Any], has_details: bool = False) -> Listing:
+    """Convert a Sauto item (search result or detail) into a Listing.
+
+    Fields absent from search results (description, VIN, power...) come out as None.
+    """
     manufacturer = item.get("manufacturer_cb") or {}
     model = item.get("model_cb") or {}
     locality = item.get("locality") or {}

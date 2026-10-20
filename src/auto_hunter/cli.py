@@ -1,4 +1,8 @@
-"""Command-line entry point."""
+"""Command-line entry point (`auto-hunter`, defined in pyproject.toml).
+
+Commands: collect, shortlist, report, history, market, reassess. Only `collect` touches
+the network; the rest read the database. Run from the repo root, or pass --config-dir.
+"""
 
 from __future__ import annotations
 

@@ -15,6 +15,8 @@ def rejection_reason(listing: Listing, profile: SearchProfile,
     """Return why the listing doesn't fit the profile, or None if it fits.
 
     Unknown values pass: a missing field is a question for the seller, not a reason to drop.
+    Pass `cls` to check the profile's generations/engines, and `catalog` to also apply
+    engine status "avoid". Without them only the plain field checks run.
     """
     if listing.model_key and listing.model_key not in profile.models:
         return f"model {listing.model_key}"

@@ -1,4 +1,12 @@
-"""One collection run: search every profile, store changes, detect removals."""
+"""One collection run: search every profile, store changes, detect removals.
+
+Order of work, cheapest first:
+1. search each profile (one API query per model, shared between profiles)
+2. drop listings with cheap local filters + classification from title/year
+3. fetch details only for survivors never fetched before, then re-check them
+4. store state, history snapshot, profile links and assessment; build alerts
+5. if every search was complete, confirm whether vanished listings are really gone
+"""
 
 from __future__ import annotations
 
@@ -18,11 +26,14 @@ log = logging.getLogger(__name__)
 
 
 def utcnow() -> str:
+    """Current UTC time in the format stored in the database."""
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 @dataclass
 class Alert:
+    """Something worth telling you about; formatted by notify.py."""
+
     kind: str  # "new" | "price_drop"
     listing: Listing
     profiles: list[str]
@@ -32,6 +43,8 @@ class Alert:
 
 @dataclass
 class RunSummary:
+    """Counts for one run; also written to the collection_runs table."""
+
     seen: int = 0
     new: int = 0
     changed: int = 0
@@ -42,7 +55,13 @@ class RunSummary:
 
 def collect(db: Database, collector: Collector, config: Config,
             profiles: list[SearchProfile] | None = None) -> RunSummary:
-    profiles = config.profiles if profiles is None else profiles
+    """Run one collection over `profiles` (default: all configured profiles).
+
+    Errors from the source are recorded rather than raised, so one failing model
+    doesn't lose the rest of the run. Removal detection is skipped unless every
+    search was complete; otherwise a network hiccup would mark live cars as removed.
+    """
+    profiles =config.profiles if profiles is None else profiles
     settings, catalog = config.settings, config.catalog
     now = utcnow()
     run_id = db.start_run(now)
@@ -155,11 +174,16 @@ def _check_vanished(db: Database, collector: Collector, seen_ids: set[str], now:
 
 
 def _is_price_drop(old: int | None, new: int | None, min_pct: float) -> bool:
+    """True if the price fell by at least min_pct percent."""
     return old is not None and new is not None and old > 0 and (old - new) / old * 100 >= min_pct
 
 
 def reassess(db: Database, config: Config) -> int:
-    """Re-label every stored listing, e.g. after editing catalog.yaml or evaluation.yaml."""
+    """Re-label every stored listing, e.g. after editing catalog.yaml or evaluation.yaml.
+
+    Uses stored data only (no network). It updates assessments, not profile membership:
+    a listing that a new rule would reject stays until the next `collect` re-checks it.
+    """
     now = utcnow()
     rows = db.all_listings()
     for row in rows:

@@ -30,6 +30,8 @@ def fold(text: str) -> str:
 
 @dataclass
 class EngineHints:
+    """What the listing reveals about its engine; None means not stated."""
+
     liters: float | None = None
     power_kw: int | None = None
     turbo: bool | None = None
@@ -59,6 +61,7 @@ def engine_hints(listing: Listing) -> EngineHints:
 
 
 def engine_matches(engine: Engine, hints: EngineHints) -> bool:
+    """True unless a known hint contradicts the engine; unknown hints match anything."""
     if hints.liters is not None and abs(engine.liters - hints.liters) > 0.05:
         return False
     if hints.power_kw is not None and not any(
@@ -72,6 +75,8 @@ def engine_matches(engine: Engine, hints: EngineHints) -> bool:
 
 @dataclass
 class Classification:
+    """Remaining (generation, engine) candidates after elimination."""
+
     generations: list[str] = field(default_factory=list)  # candidates, best first
     engines: list[str] = field(default_factory=list)      # candidates
     # Specs were available but match no catalog engine of the candidate generations.
@@ -90,6 +95,7 @@ class Classification:
 
 
 def classify(listing: Listing, catalog: Catalog) -> Classification:
+    """Narrow down generation and engine: year, then title hints, then engine specs."""
     gens: list[Generation] = catalog.generations_for(listing.model_key)
     if not gens:
         return Classification(engine_known=engine_hints(listing).known)

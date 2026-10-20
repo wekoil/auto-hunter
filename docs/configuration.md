@@ -1,0 +1,169 @@
+# Configuration
+
+Everything about *what* to look for is in `config/`. Files are loaded and validated
+together by `config.load_config`; a typo (unknown engine id, bad regex, profile over
+budget) fails at startup with a message naming the problem.
+
+| File | Layer | Changes when… |
+|---|---|---|
+| `requirements.yaml` | 1. Global requirements | your general needs change (budget, fuel, body) |
+| `profiles.yaml` | 2. Vehicle profiles | you add/drop a model or engine family to watch |
+| `evaluation.yaml` | 3. Evaluation rules | you change how cars are labelled |
+| `catalog.yaml` | Knowledge base | you learn something about a generation or engine |
+| `settings.yaml` | Technical | you change pacing, limits, database location |
+
+Values such as fuel or body use **Sauto's SEO names**, the slugs in sauto.cz URLs:
+fuel `benzin`, `nafta`, `hybridni`, `lpg-benzin`; gearbox `manualni`, `automaticka`;
+body `kombi`, `hatchback`, `liftback`, `sedanlimuzina`, `suv`, `mpv`.
+
+---
+
+## requirements.yaml: global requirements
+
+Inherited by every profile.
+
+| Key | Meaning |
+|---|---|
+| `fuel` | Allowed fuels. Sent to the API as a filter. |
+| `body` | Allowed body styles. Note Sauto tags some MPVs (Touran, Roomster) as `kombi` too, which is why profiles name models explicitly. |
+| `price_max` | Overall budget in CZK. A profile may set a lower one, never higher. |
+| `mileage_max` | Hard mileage cap. Keep it above your *preferred* limit (in evaluation.yaml) so good higher-mileage cars are flagged, not hidden. |
+| `exclude_keywords` | Words that drop a listing when found in its title. Matching ignores case and diacritics and only matches at a word start, so `havarovan` matches "Havarovaný" but not "nehavarovaný". Descriptions are not searched (they often say "nehavarovaný"). |
+
+## profiles.yaml: vehicle profiles
+
+Each profile is one kind of car you'd consider. Profiles may overlap; a car matching
+several is stored once and listed with all its profiles.
+
+| Key | Meaning |
+|---|---|
+| `name` | Unique id, shown in alerts and reports. Renaming a profile makes it "new" (its first run is a silent baseline). |
+| `priority` | `high`, `medium` or `exploratory`. Orders the shortlist. |
+| `generations` | Catalog generation ids. Determines which Sauto models are searched and the default year range. A car must *plausibly* be one of them. |
+| `engines` | Catalog engine ids. If set, cars whose specs rule out all of these are dropped; cars with unknown/unclear engines stay, flagged. Omit to accept any engine. |
+| `models` | Extra Sauto `make:model` keys searched without generation logic (used by exploratory profiles). |
+| `year_min`, `year_max` | Override the generations' year span. |
+| `price_max`, `price_min`, `mileage_max` | Override the global values (within budget). |
+| `gearbox` | Restrict gearbox, e.g. `[manualni]`. Omit for either. |
+| `exclude_keywords` | Added to the global list. |
+
+### Current profiles
+
+| Profile | Searches | Engines |
+|---|---|---|
+| A-octavia3-1.6mpi | Octavia III | 1.6 MPI (EA211) |
+| B-golf-variant-1.6mpi | Golf V/VI/VII Variant | 1.6 MPI (EA113, EA211) |
+| C-golf-variant-1.4tsi | Golf VII Variant | 1.4 TSI (EA211 only) |
+| D-octavia3-other-petrol | Octavia III | 1.0/1.2/1.4/1.5 TSI (EA211), 1.8 TSI |
+| E-focus-estate | Focus II/III/IV kombi, 2008+ | 1.6 Ti-VCT, 1.0/1.5/1.6 EcoBoost |
+| F-alternatives | Auris, Avensis, i30, cee'd, Astra (2010+) | any (all flagged unvetted) |
+
+## evaluation.yaml: evaluation rules
+
+Rules here **never hide a car**; they only label it.
+
+| Key | Meaning |
+|---|---|
+| `price_tiers` | Bands by `max` price. A car gets the first tier it fits. The `note` becomes a flag. |
+| `preferred_mileage_max` | Above this, a `mileage_high` caution is added. |
+| `medium_confidence_max_uncertainties` | Confidence is `high` with no uncertainties, `medium` up to this many, `low` beyond. |
+
+Uncertainties are: unclear generation, unclear/unknown/uncataloged engine, missing VIN,
+service history not stated. Known risks (caution engine, high mileage, no service book)
+are flags but don't lower confidence. They are information, not uncertainty.
+
+After editing this file, run `auto-hunter reassess` to re-label stored listings.
+
+## catalog.yaml: the knowledge base
+
+### Generations
+
+```yaml
+octavia-3:
+  label: Škoda Octavia III (5E)
+  models: [skoda:octavia]          # Sauto model keys it's listed under
+  years: [2013, 2020]              # estate manufacturing years; null = still produced
+  title_hints: ['octavia,?\s*(iii|3)\b(?![.,]\d)', '\b5e\b']
+  engines: [ea211-1.6-mpi, ...]    # engines this generation was sold with
+```
+
+- **years** of adjacent generations deliberately overlap in changeover years. The
+  classifier then uses title hints and engine specs to tell them apart.
+- **title_hints** are regexes matched against the lowercased, diacritics-free title +
+  variant. The `(?![.,]\d)` guard stops "Octavia 2.0 TSI" counting as "Octavia 2".
+- **engines** matter for classification even if no profile wants them: listing the
+  Octavia II's engines is what lets a 2013 1.6 MPI 75 kW be recognised as an Octavia II.
+
+### Engines
+
+```yaml
+ea211-1.6-mpi:
+  label: 1.6 MPI (EA211)
+  liters: 1.6               # vs. displacement rounded to 0.1 l, or "1.6" in the title
+  power_kw: [81]            # every output sold; matched ±3 kW
+  turbo: false              # vs. title keywords (TSI/EcoBoost → turbo; MPI/Ti-VCT → not)
+  status: preferred
+  notes: ...                # shown in caution flags
+  automatic_note: ...       # extra caution when the car is an automatic (e.g. DSG DQ200)
+```
+
+| Status | Effect |
+|---|---|
+| `preferred`, `ok` | No flag. |
+| `caution` | Caution flag with the notes. |
+| `unvetted` | Info flag "reliability not yet researched". |
+| `avoid` | Car rejected when every engine it could be is `avoid`; if it only *might* be one, kept with "Could be X, which you've excluded. Confirm the engine code". |
+
+The notes are research starting points, not verified facts.
+
+### How a car is classified
+
+1. Take the catalog generations for the car's Sauto model.
+2. Keep those whose years include the car's year.
+3. If any title hint matches, keep only the hinted generations.
+4. Form every (generation, engine) pair; drop pairs whose engine contradicts the known
+   displacement, power or turbo keyword.
+5. One pair left → identified. Several → unclear (flagged). None but specs known →
+   "engine not in catalog" (dropped by engine-restricted profiles).
+
+---
+
+## Recipes
+
+**Exclude an engine you never want.** Set its `status: avoid` in catalog.yaml, then
+`auto-hunter reassess`. The next `collect` moves already-stored matches to `unmatched`.
+
+**Record research about an engine.** Edit its `status` and `notes`, then `reassess`.
+
+**Add an engine to a profile.** If it's in the catalog, add its id to the profile's
+`engines`. If not, add it under `engines:` in the catalog *and* to each generation's
+`engines` list that had it.
+
+**Add a new model with generation logic.** Find the Sauto model key in the website
+URL (`sauto.cz/inzerce/osobni/<make>/<model>`); some models have two keys (e.g.
+`golf` and `golf-variant`), so check both. Add generations (and engines) to the
+catalog, then a profile referencing them. A wrong model key fails loudly: Sauto would
+otherwise silently return the whole make, and the collector checks for that.
+
+**Watch a model without researching it.** Add its key to a profile's `models` (like
+F-alternatives). Every car is flagged "not in catalog yet".
+
+**Change the budget.** `price_max` in requirements.yaml, and the tiers in evaluation.yaml.
+
+**Allow only manual gearboxes for one profile.** Add `gearbox: [manualni]` to it.
+
+## settings.yaml
+
+| Key | Default | Meaning |
+|---|---|---|
+| `database_path` | `data/auto_hunter.db` | SQLite file (created on first run; git-ignored). |
+| `http.user_agent` | `auto-hunter/0.1 (...)` | Identifies the tool honestly. |
+| `http.request_delay_s` | 1.5 | Minimum gap between requests. Don't lower it casually. |
+| `http.timeout_s`, `http.max_retries` | 20, 3 | Retries cover network errors, 429 and 5xx, with exponential backoff. |
+| `collection.page_size` | 100 | Results per search page. |
+| `collection.max_results_per_query` | 2000 | Safety cap per model query; hitting it disables removal detection that run. |
+| `collection.max_detail_fetches` | 300 | Detail requests per run; the rest wait for the next run. |
+| `collection.max_removal_checks` | 200 | Requests per run confirming vanished listings. |
+| `alerts.min_price_drop_pct` | 3 | Smallest price drop that triggers an alert. |
+
+Telegram credentials go in `.env` (see `.env.example`), never in config files.

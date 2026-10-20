@@ -7,6 +7,9 @@ and alerts you (Telegram or console) about new listings and price drops.
 This is the MVP (phase 1): data collection and history, no AI yet. Later phases
 add AI listing analysis, market valuation and ranking.
 
+Full documentation is in [docs/](docs/README.md): [configuration](docs/configuration.md),
+[code reference](docs/code-reference.md) and [data model](docs/data-model.md).
+
 ## Setup
 
 ```bash

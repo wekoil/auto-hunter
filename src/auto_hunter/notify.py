@@ -15,6 +15,7 @@ TELEGRAM_MAX_LEN = 4000
 
 
 def format_alert(alert: Alert) -> str:
+    """Plain-text alert: price line, title, specs, identity, flags, profiles and link."""
     l = alert.listing
     price = f"{l.price_czk:,} Kč".replace(",", " ") if l.price_czk else "price on request"
     if alert.kind == "price_drop" and alert.old_price:
@@ -50,6 +51,10 @@ def format_alert(alert: Alert) -> str:
 
 
 def send_alerts(alerts: list[Alert]) -> None:
+    """Send to Telegram if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are set, else print.
+
+    A failed send is logged, not raised: the data is already stored either way.
+    """
     if not alerts:
         return
     messages = [format_alert(a) for a in alerts]
@@ -72,6 +77,7 @@ def send_alerts(alerts: list[Alert]) -> None:
 
 
 def _chunks(messages: list[str]) -> list[str]:
+    """Pack alerts into as few messages as fit Telegram's length limit."""
     chunks, current = [], ""
     for m in messages:
         if current and len(current) + len(m) + 2 > TELEGRAM_MAX_LEN:

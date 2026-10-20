@@ -21,6 +21,8 @@ UNCERTAINTY_CODES = {
 
 @dataclass
 class Flag:
+    """One finding. code is stable (for code/tests), message is for you to read."""
+
     code: str
     severity: str  # info | caution
     message: str
@@ -28,6 +30,8 @@ class Flag:
 
 @dataclass
 class Assessment:
+    """Labels for one listing. generation/engine are set only when unambiguous."""
+
     generation: str | None
     generation_candidates: list[str]
     engine: str | None
@@ -43,6 +47,12 @@ class Assessment:
 
 def assess(listing: Listing, cls: Classification, catalog: Catalog,
            rules: EvaluationRules) -> Assessment:
+    """Apply the evaluation rules to a classified listing.
+
+    Flags fall into two kinds: things we know are risky (caution engines, high mileage,
+    no service book) and things we don't know (unclear engine, missing VIN). Only the
+    second kind lowers confidence, since a known risk is information, not uncertainty.
+    """
     flags: list[Flag] = []
 
     def flag(code: str, severity: str, message: str) -> None:

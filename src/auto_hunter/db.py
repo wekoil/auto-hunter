@@ -1,4 +1,14 @@
-"""SQLite storage: current listing state plus an append-only change history."""
+"""SQLite storage: current listing state plus an append-only change history.
+
+Tables:
+- listings:            one row per listing, its latest state and original source payload
+- listing_snapshots:   append-only; one row per observed change (price/mileage/status)
+- listing_profiles:    which profiles a listing has matched, and when
+- listing_assessments: derived labels (generation, engine, flags), recomputable any time
+- collection_runs:     one row per `collect` run, for monitoring reliability
+
+Timestamps are UTC ISO-8601 strings, so they sort and compare correctly as text.
+"""
 
 from __future__ import annotations
 
@@ -126,6 +136,8 @@ def row_to_listing(row: sqlite3.Row) -> Listing:
 
 @dataclass
 class UpsertResult:
+    """What upsert_listing did: event is "new", "changed", "reactivated" or None."""
+
     listing_id: int
     event: str | None  # None when nothing tracked changed
     old_price: int | None = None
@@ -133,7 +145,10 @@ class UpsertResult:
 
 
 class Database:
+    """Thin wrapper over one SQLite connection. Callers decide when to commit()."""
+
     def __init__(self, path: Path | str) -> None:
+        """Open (creating if needed) the database at path, or ":memory:" for tests."""
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(path)
@@ -164,7 +179,11 @@ class Database:
         ).fetchone()
 
     def upsert_listing(self, listing: Listing, now: str) -> UpsertResult:
-        """Store the listing's current state and record a snapshot if price/mileage/status changed."""
+        """Store the listing's current state and record a snapshot if price/mileage/status changed.
+
+        Always sets status to 'active'. A search result (no details) never blanks
+        fields that only a detail fetch provides, nor replaces the richer detail payload.
+        """
         row = self.get_listing(listing.source, listing.source_id)
         values = {f: getattr(listing, f) for f in _LISTING_FIELDS}
         values["image_urls"] = json.dumps(listing.image_urls)
@@ -224,10 +243,8 @@ class Database:
         )
         self._snapshot(listing_id, now, status, row["price_czk"], row["mileage_km"], status)
 
-    def touch(self, listing_id: int, now: str) -> None:
-        self.conn.execute("UPDATE listings SET last_seen_at = ? WHERE id = ?", (now, listing_id))
-
     def link_profile(self, listing_id: int, profile: str, now: str) -> None:
+        """Record that the listing matched this profile in this run."""
         self.conn.execute(
             """INSERT INTO listing_profiles (listing_id, profile, first_seen_at, last_seen_at)
                VALUES (?, ?, ?, ?)
@@ -236,6 +253,7 @@ class Database:
         )
 
     def save_assessment(self, listing_id: int, assessment: Assessment, now: str) -> None:
+        """Replace the listing's assessment. Only the latest one is kept."""
         self.conn.execute(
             """INSERT OR REPLACE INTO listing_assessments
                (listing_id, generation, engine, price_tier, confidence, data, assessed_at)
@@ -248,9 +266,11 @@ class Database:
         return self.conn.execute("SELECT * FROM listings").fetchall()
 
     def known_profiles(self) -> set[str]:
+        """Profiles that have matched at least one listing in an earlier run."""
         return {r[0] for r in self.conn.execute("SELECT DISTINCT profile FROM listing_profiles")}
 
     def active_listings(self, source: str) -> list[sqlite3.Row]:
+        """(id, source_id) of listings currently considered live and matching."""
         return self.conn.execute(
             "SELECT id, source_id FROM listings WHERE source = ? AND status = 'active'", (source,)
         ).fetchall()
@@ -266,12 +286,14 @@ class Database:
     # --- runs ---------------------------------------------------------------------
 
     def start_run(self, now: str) -> int:
+        """Open a collection_runs row (committed at once, so crashed runs stay visible)."""
         cur = self.conn.execute("INSERT INTO collection_runs (started_at) VALUES (?)", (now,))
         self.conn.commit()
         return cur.lastrowid
 
     def finish_run(self, run_id: int, now: str, status: str, seen: int, new: int,
                    changed: int, removed: int, errors: list[str]) -> None:
+        """Close the run with its counts; status is ok, partial or failed."""
         self.conn.execute(
             """UPDATE collection_runs SET finished_at = ?, status = ?, seen = ?, new = ?,
                changed = ?, removed = ?, errors = ? WHERE id = ?""",

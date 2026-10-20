@@ -1,4 +1,8 @@
-"""Interface every marketplace collector implements."""
+"""Interface every marketplace collector implements.
+
+To add a marketplace: subclass Collector, set a unique `source` name, convert its data
+into Listing, and make `model_key` use the same "make:model" names as your profiles.
+"""
 
 from __future__ import annotations
 
@@ -22,7 +26,9 @@ class SearchResult:
 
 
 class Collector(ABC):
-    source: str
+    """A marketplace. Implementations must be polite: pace requests, retry sparingly."""
+
+    source: str  # stored with every listing, e.g. "sauto"
 
     @abstractmethod
     def search(self, profile: SearchProfile) -> SearchResult:

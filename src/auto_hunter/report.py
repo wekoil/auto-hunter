@@ -19,6 +19,7 @@ def _fmt_km(km: int | None) -> str:
 
 
 def changes_report(db: Database, days: float) -> str:
+    """New, changed, removed and reactivated listings over the last `days` days."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
     rows = db.conn.execute(
         """SELECT s.event, s.observed_at, s.price_czk, l.title, l.year, l.mileage_km, l.url,
@@ -48,6 +49,7 @@ def changes_report(db: Database, days: float) -> str:
 
 
 def history_report(db: Database, source_id: str) -> str:
+    """One listing: specs, current assessment and every recorded change."""
     listing = db.conn.execute("SELECT * FROM listings WHERE source_id = ?", (source_id,)).fetchone()
     if listing is None:
         return f"No listing with id {source_id}."
