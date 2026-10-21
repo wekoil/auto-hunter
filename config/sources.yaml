@@ -25,6 +25,53 @@ skodaplus:
     kia:cee-d-sw:            {make: KIA, models: [Ceed SW]}
     opel:astra:              {make: Opel, models: [Astra, Astra Sport Tourer]}
 
+dasweltauto:
+  # Das WeltAuto: VW-group dealer network's used cars (all makes), public JSON API.
+  # Includes the VW-group stock of dealer groups such as Louda and Klokočka.
+  enabled: true
+  # Model key -> brand and model values from dasweltauto.cz's filter (one request each).
+  models:
+    skoda:octavia:           {brand: skoda, models: [skoda-octavia]}
+    volkswagen:golf:         {brand: vw, models: [vw-golf]}
+    volkswagen:golf-variant: {brand: vw, models: [vw-golf-variant, vw-golf-variant-8-fl]}
+    ford:focus:              {brand: ford, models: [ford-focus]}
+    toyota:auris:            {brand: toyota, models: [toyota-auris]}
+    hyundai:i30:             {brand: hyundai, models: [hyundai-i30]}
+    kia:cee-d:               {brand: kia, models: [kia-ceed]}
+    kia:cee-d-sw:            {brand: kia, models: [kia-ceed-sw]}
+    opel:astra:              {brand: opel, models: [opel-astra]}
+
+louda:
+  # Louda Auto (autolouda.cz): large dealer group, all makes, JSON API behind its catalogue.
+  # No VINs published.
+  enabled: true
+  # Model key -> make and model names exactly as autolouda.cz's filter shows them.
+  models:
+    skoda:octavia:           {make: Škoda, models: [OCTAVIA]}
+    volkswagen:golf:         {make: Volkswagen, models: [GOLF]}
+    volkswagen:golf-variant: {make: Volkswagen, models: [GOLF VARIANT]}
+    ford:focus:              {make: Ford, models: [FOCUS]}
+    toyota:auris:            {make: Toyota, models: [AURIS]}
+    toyota:avensis:          {make: Toyota, models: [AVENSIS]}
+    hyundai:i30:             {make: Hyundai, models: [I30, I30 COMBI]}
+    kia:cee-d:               {make: Kia, models: [CEED]}   # includes the SW
+    opel:astra:              {make: Opel, models: [ASTRA]}
+
+klokocka:
+  # Autosalon Klokočka (autoklokocka.cz): dealer group (Škoda, VW, Audi, Kia, Honda, ...),
+  # server-rendered pages. No VINs published.
+  enabled: true
+  # Model key -> brand/model path from autoklokocka.cz URLs (/nabidka-vozu/znacka:X/model:Y).
+  models:
+    skoda:octavia:           {brand: skoda, model: octavia}
+    volkswagen:golf:         {brand: volkswagen, model: golf}
+    volkswagen:golf-variant: {brand: volkswagen, model: golf}
+    kia:cee-d:               {brand: kia, model: ceed}
+    hyundai:i30:             {brand: hyundai, model: i30}
+    ford:focus:              {brand: ford, model: focus}
+    toyota:auris:            {brand: toyota, model: auris}
+    opel:astra:              {brand: opel, model: astra}
+
 bazos:
   # Bazoš: free-text classifieds. robots.txt disallows its search URLs, so we read
   # brand categories newest-first and stop where the previous run left off.

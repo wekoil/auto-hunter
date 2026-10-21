@@ -1,11 +1,15 @@
 from auto_hunter.collectors.base import Collector, CollectorError, SearchResult
 from auto_hunter.collectors.bazos import BazosCollector
+from auto_hunter.collectors.dasweltauto import DasWeltAutoCollector
+from auto_hunter.collectors.klokocka import KlokockaCollector
+from auto_hunter.collectors.louda import LoudaCollector
 from auto_hunter.collectors.sauto import SautoCollector
 from auto_hunter.collectors.skodaplus import SkodaPlusCollector
 from auto_hunter.config import Config
 
 __all__ = [
-    "BazosCollector", "Collector", "CollectorError", "SautoCollector", "SearchResult",
+    "BazosCollector", "Collector", "CollectorError", "DasWeltAutoCollector",
+    "KlokockaCollector", "LoudaCollector", "SautoCollector", "SearchResult",
     "SkodaPlusCollector", "build_collectors",
 ]
 
@@ -16,6 +20,9 @@ def build_collectors(config: Config, only: list[str] | None = None) -> list[Coll
     factories = {
         "sauto": lambda cfg: SautoCollector(s.http, s.collection),
         "skodaplus": lambda cfg: SkodaPlusCollector(s.http, s.collection, cfg),
+        "dasweltauto": lambda cfg: DasWeltAutoCollector(s.http, s.collection, cfg),
+        "louda": lambda cfg: LoudaCollector(s.http, s.collection, cfg),
+        "klokocka": lambda cfg: KlokockaCollector(s.http, s.collection, cfg),
         "bazos": lambda cfg: BazosCollector(s.http, s.collection, cfg),
     }
     unknown = set(config.sources) - set(factories)

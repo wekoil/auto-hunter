@@ -251,3 +251,27 @@ def test_collector_state_persists_between_runs(db):
         c.search_results = []
         collect(db, c, cfg())
     assert db.load_state("inc") == {"runs": 3}
+
+
+def test_same_car_without_vin_matched_by_fingerprint(db):
+    c = FakeCollector()
+    c.search_results = [make_listing("1", 200_000, model_key="x:y", vin="TMBJC7NE0H0062499")]
+    c.details = {"1": c.search_results[0]}
+    collect(db, c, cfg())
+    inc = IncrementalCollector()          # e.g. a dealer site that publishes no VIN
+    inc.search_results = [inc_listing("9", 195_000, model_key="x:y")]
+    inc.details = {"9": inc.search_results[0]}
+    collect(db, inc, cfg())
+    data = db.conn.execute(
+        """SELECT a.data FROM listing_assessments a JOIN listings l ON l.id = a.listing_id
+           WHERE l.source = 'inc'""").fetchone()["data"]
+    assert "Probably the same car (model, year, km) also listed on fake for 200 000 Kč" in data
+
+
+def test_detail_fetch_does_not_blank_summary_fields(db):
+    c = FakeCollector()
+    c.search_results = [make_listing("1", mileage_km=98_000)]
+    c.details = {"1": make_listing("1", mileage_km=None, power_kw=81)}   # detail lacks km
+    collect(db, c, cfg())
+    row = db.get_listing("fake", "1")
+    assert (row["mileage_km"], row["power_kw"]) == (98_000, 81)

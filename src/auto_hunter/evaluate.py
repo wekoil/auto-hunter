@@ -116,7 +116,8 @@ def assess(listing: Listing, cls: Classification, catalog: Catalog,
         flag("damage_reported", "caution", "Listing reports previous accident damage")
     for d in duplicates:
         price = f"{d['price_czk']:,} Kč".replace(",", " ") if d["price_czk"] else "no price"
-        flag("also_listed", "info", f"Same VIN also listed on {d['source']} for {price}: {d['url']}")
+        how = "Same VIN" if d["match"] == "vin" else "Probably the same car (model, year, km)"
+        flag("also_listed", "info", f"{how} also listed on {d['source']} for {price}: {d['url']}")
 
     uncertainties = sum(f.code in UNCERTAINTY_CODES for f in flags)
     confidence = (

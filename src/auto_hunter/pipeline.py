@@ -24,7 +24,7 @@ from auto_hunter.config import Config, SearchProfile
 from auto_hunter.db import DETAIL_ONLY_FIELDS, Database, row_to_listing
 from auto_hunter.evaluate import Assessment, assess
 from auto_hunter.filters import rejection_reason
-from auto_hunter.models import Listing, is_real_vin
+from auto_hunter.models import Listing, is_real_vin, merge_listings
 
 log = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ class _Run:
         res = db.upsert_listing(listing, self.now)
         for name in profile_names:
             db.link_profile(res.listing_id, name, self.now)
-        duplicates = db.same_vehicle(res.listing_id, listing.vin) if is_real_vin(listing.vin) else []
+        duplicates = db.same_vehicle(res.listing_id, listing.vin if is_real_vin(listing.vin) else None)
         assessment = assess(listing, classify(listing, self.config.catalog), self.config.catalog,
                             self.config.evaluation, duplicates)
         db.save_assessment(res.listing_id, assessment, self.now)
@@ -167,9 +167,11 @@ def collect(db: Database, collector: Collector, config: Config,
         elif not listing.has_details and run.detail_budget > 0:
             run.detail_budget -= 1
             try:
-                listing = run.fetch(source_id, "detail") or listing
+                detailed = run.fetch(source_id, "detail")
             except CollectorError:
-                pass
+                detailed = None
+            if detailed is not None:
+                listing = merge_listings(listing, detailed)
 
         # Details reveal body, engine specs etc.; re-check what the search couldn't.
         profile_names = run.matching_profiles(listing, profile_names)
@@ -210,7 +212,8 @@ def _check_vanished(run: _Run, seen_ids: set[str]) -> int:
         else:
             # Still online but outside our search filters (e.g. price raised). Keep its
             # latest state, then stop re-checking it every run.
-            db.upsert_listing(listing, run.now)
+            stored = db.get_listing(run.collector.source, row["source_id"])
+            db.upsert_listing(merge_listings(row_to_listing(stored), listing), run.now)
             db.set_status(row["id"], "unmatched", run.now)
         db.commit()
     if len(vanished) > cap:
@@ -242,11 +245,13 @@ def _recheck_stale(run: _Run, seen_ids: set[str]) -> int:
             db.commit()
             removed += 1
             continue
+        stored = db.get_listing(run.collector.source, row["source_id"])
+        listing = merge_listings(row_to_listing(stored), listing)
         profile_names = run.matching_profiles(listing, all_profiles)
         if profile_names:
             run.store(listing, profile_names)
         else:
-            run.mark_unmatched(listing, db.get_listing(run.collector.source, row["source_id"]))
+            run.mark_unmatched(listing, stored)
     if len(stale) > cap:
         log.info("%d stale listings left for the next run", len(stale) - cap)
     return removed
@@ -268,7 +273,7 @@ def reassess(db: Database, config: Config) -> int:
     for row in rows:
         listing = row_to_listing(row)
         cls = classify(listing, config.catalog)
-        duplicates = db.same_vehicle(row["id"], listing.vin) if is_real_vin(listing.vin) else []
+        duplicates = db.same_vehicle(row["id"], listing.vin if is_real_vin(listing.vin) else None)
         db.save_assessment(
             row["id"], assess(listing, cls, config.catalog, config.evaluation, duplicates), now)
     db.commit()

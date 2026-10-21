@@ -181,6 +181,41 @@ exist logs a warning. Only Czech stock is requested, because Slovak stock is pri
 Škoda Plus is mostly certified dealer stock, often above this budget, so expect
 few matches but very complete data (VIN, accident flag, service book).
 
+### dasweltauto
+
+```yaml
+models:
+  volkswagen:golf-variant: {brand: vw, models: [vw-golf-variant, vw-golf-variant-8-fl]}
+```
+
+Brand and model values from dasweltauto.cz's filter (visible in the API's facet lists).
+Each model is one request: the API ignores `models` without `brands`, and mixes up
+several models in one request. Includes non-VW brands traded in at VW-group dealers,
+and the VW-group stock of groups such as Louda and Klokočka.
+
+### louda
+
+```yaml
+models:
+  hyundai:i30: {make: Hyundai, models: [I30, I30 COMBI]}
+```
+
+Make and model names exactly as autolouda.cz's filter lists them (upper case models).
+An unknown name returns no cars, not an error, so check the filter if a model never
+matches. No VINs; duplicates on other sites are found by fingerprint.
+
+### klokocka
+
+```yaml
+models:
+  skoda:octavia: {brand: skoda, model: octavia}
+```
+
+The `znacka:` and `model:` parts of autoklokocka.cz URLs. Two model keys may share
+a path (Golf and Golf Variant both use `volkswagen/golf`; the body filter tells
+them apart). Cards lack power, so each new car costs one detail request. Klokočka's
+stock is mostly newer and above this budget.
+
 ### bazos
 
 | Key | Default | Meaning |

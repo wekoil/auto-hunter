@@ -11,8 +11,9 @@ collection_runs                      (one row per source per collect)
 source_state                         (collector bookkeeping, e.g. Bazoš crawl position)
 ```
 
-Sources: `sauto`, `skodaplus`, `bazos`. The same car on two sites is two listings;
-when both publish the full VIN they're linked by an `also_listed` flag (see below).
+Sources: `sauto`, `skodaplus`, `dasweltauto`, `louda`, `klokocka`, `bazos`. The same car
+on two sites is two listings, linked by an `also_listed` flag: by full VIN, or by exact
+model + year + mileage when one side publishes no VIN (Louda, Klokočka).
 
 ## listings
 

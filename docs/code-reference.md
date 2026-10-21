@@ -14,6 +14,9 @@ src/auto_hunter/
     http.py           PoliteClient: pacing, retries, User-Agent
     sauto.py          Sauto.cz (JSON API)
     skodaplus.py      Škoda Plus (GraphQL API)
+    dasweltauto.py    Das WeltAuto (JSON API)
+    louda.py          Louda Auto (catalogue JSON API)
+    klokocka.py       Autosalon Klokočka (HTML)
     bazos.py          Bazoš (HTML, incremental crawl)
   textspecs.py        specs from free text (used by Bazoš)
   classify.py         generation/engine identification
@@ -81,7 +84,9 @@ load, which catches typos.
 
 `None` always means "not stated", never "no"; filters and evaluation rely on that.
 `is_real_vin` tells a full VIN from a masked or partial one; only real VINs are used
-to match the same car across sources.
+to match the same car across sources. `merge_listings(base, update)` returns `update`
+with its missing fields filled from `base`. The pipeline uses it whenever a detail page
+or recheck carries fewer fields than what we already have.
 
 ## collectors/base.py
 
@@ -140,6 +145,36 @@ Sauto.cz via its undocumented JSON API (allowed by robots.txt).
   listings come back with `has_details=True` and no detail requests are made.
 - `parse_car` maps their codebook values back to ours (`DSG`/`Automatická` →
   `automaticka`, `Kombi` → `kombi`) and `crashed` to `Listing.damaged`.
+
+## collectors/dasweltauto.py
+
+VW-group dealer network via `GET /api/locales/cs_CZ/vehicles/search`, the endpoint its
+Angular frontend uses. Full scan, structured (VIN, kW, mileage, first registration).
+
+- One request per model with both `brands` and `models` (see configuration.md).
+- Ids are `fiveDigitsDealerId + fiveDigitsVehicleId`; `fetch` re-uses the search with
+  `vehicleIds=<id>`, and an empty result means the car is gone.
+- Single-valued filters only (fuel, body, gearbox when the profile has exactly one).
+  Multi-valued profiles fall back to local filtering.
+
+## collectors/louda.py
+
+Louda Auto via `POST /api/cars/filter-cars`, the endpoint behind its catalogue. The
+request body is the page's filter object; a minimal one (used cars, makes/models, fuel,
+body, gearbox, price, mileage) is accepted. Full scan, 24 cars per page.
+
+- No body per car: it's taken from the filter when the profile asks for one body.
+- `fetch` reads `/koupit/x-<id>` (only the id matters). Removed cars still return 200
+  with the title "Vozidlo již není v nabídce". The page only confirms the car exists;
+  `merge_listings` keeps the stored price and specs.
+
+## collectors/klokocka.py
+
+Autosalon Klokočka via server-rendered HTML (`/nabidka-vozu/znacka:X/model:Y?stav[]=ojete&...&page=N`,
+10 cards per page). The card slug is the listing id. Cards carry title, price, fuel,
+mileage and year. The detail page adds power ("Výkon: 110 Kw"), gearbox, body, first
+owner, and price in its ld+json. A removed car returns 404. The site's `cena_preset`
+price parameter is ignored in URLs, so price is filtered locally.
 
 ## collectors/bazos.py
 
@@ -225,7 +260,7 @@ logs/debugging; nothing stores them.
 | `mileage_high`, `service_none` | caution | no |
 | `service_unknown`, `vin_missing` | info | yes |
 | `damage_reported` | caution | no |
-| `also_listed` (same VIN active on another source, with its price and link) | info | no |
+| `also_listed` (same car active on another source, by VIN or fingerprint, with its price and link) | info | no |
 | `price_missing`, `tier_<label>` | info | no |
 
 Service and VIN flags are only raised after a detail fetch, because search results
@@ -276,7 +311,10 @@ Schema and all SQL writes. See [data-model.md](data-model.md) for tables and sta
   (`DETAIL_ONLY_FIELDS`) or overwrites the stored detail payload.
 - `set_status` marks `removed`/`unmatched` with a snapshot.
 - `active_listings(source, seen_before)` lists tracked listings, optionally only stale ones.
-- `same_vehicle(listing_id, vin)` finds the same car on other sources.
+- `same_vehicle(listing_id, vin)` finds the same car on other sources: by full VIN, or
+  by an exact model key + year + mileage fingerprint when at least one side has no
+  VIN (two different full VINs are never matched). Mileage must be at least 1,000 km.
+  On live data every Louda car in scope was also on Sauto at the same price.
 - `load_state` / `save_state` persist each collector's `state` dict.
 - `row_to_listing` rebuilds a `Listing` from a row (used by `reassess` and for
   non-authoritative sources).
@@ -313,7 +351,7 @@ Run with `uv run pytest`. No test touches the network.
 |---|---|
 | `test_pipeline.py` | Full runs against fake collectors and an in-memory DB: baseline without alerts, price-drop history and alerts, removal vs unmatched, failed search skipping removals, remembering detail rejections, details not erased by later search results; incremental sources (absence isn't removal, stale recheck finds removals and price drops, snippets don't overwrite detail specs), per-source baselines, same-VIN flag, persisted collector state. |
 | `test_filters_and_parsing.py` | Sauto item parsing, search parameters, plain filters, keyword word-boundary matching, and the collector's model guard and query cache (via `httpx.MockTransport`). |
-| `test_sources.py` | Bazoš list/detail parsing (markup copied from the site), model/country/body/fuel filtering, model order, the crawl stop rule and first-crawl cap, gone vs live detection; Škoda Plus parsing, id resolution, Czech-only filter and paging. |
+| `test_sources.py` | Bazoš list/detail parsing (markup copied from the site), model/country/body/fuel filtering, model order, the crawl stop rule and first-crawl cap, gone vs live detection; Škoda Plus parsing, id resolution, Czech-only filter and paging; Das WeltAuto params, one request per model, fetch by id; Louda filter, parsing, paging, "no longer offered" pages; Klokočka cards, params, paging, 404. |
 | `test_textspecs.py` | Free-text extraction against real ad phrasing, including every trap listed above. |
 | `test_classify_evaluate.py` | Classification against the **real** `config/catalog.yaml` (changeover years, power, title hints, turbo keywords), profile routing, `avoid` handling, profile resolution, and assessment flags/confidence. |
 

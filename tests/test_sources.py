@@ -207,3 +207,137 @@ def test_skodaplus_search_resolves_ids_and_filters_czech():
                    "priceRange": {"max": 200000}}
     # ford:focus has no mapping, so it's skipped rather than failing.
     assert len(sent) == 4
+
+
+# --- Das WeltAuto -----------------------------------------------------------------------
+
+from auto_hunter.collectors.dasweltauto import DasWeltAutoCollector, build_params, parse_vehicle  # noqa: E402
+from auto_hunter.collectors.klokocka import (  # noqa: E402
+    KlokockaCollector, build_params as klo_params, listing_from_card, parse_list_page as klo_list,
+)
+from auto_hunter.collectors.louda import (  # noqa: E402
+    LoudaCollector, build_filter, parse_car as louda_parse_car, parse_detail_page as louda_detail,
+)
+
+DWA_ITEM = {
+    "id": {"fiveDigitsDealerId": "02028", "fiveDigitsVehicleId": "00435"},
+    "imageUrls": ["https://img/1"], "price": 129900, "powerKw": 77, "mileage": 119517,
+    "modelVariant": "VW Golf Variant Trendline 1,2 TSI 77 kW", "registration": "2013-05-02",
+    "dealer": {"name": "AMOND", "postalCode": "27204", "city": "Kladno"}, "brand": "Volkswagen",
+    "fuelText": "Benzín", "bodyType": "Kombi", "gearTypeText": "Manuální převodovka",
+    "nameLabel": "Golf Variant", "variantLabel": "Trendline 1,2 TSI 77 kW", "vin": "WVWZZZAUZDP000001",
+}
+
+
+def test_dwa_parse_and_params():
+    l = parse_vehicle(DWA_ITEM, "volkswagen:golf-variant")
+    assert (l.source_id, l.url) == ("0202800435", "https://www.dasweltauto.cz/vehicle/0202800435")
+    assert (l.year, l.mileage_km, l.power_kw, l.fuel, l.body, l.gearbox, l.vin) == (
+        2013, 119517, 77, "benzin", "kombi", "manualni", "WVWZZZAUZDP000001")
+    p = SearchProfile(name="p", models=[], fuel=["benzin"], body=["kombi"], price_max=200000)
+    assert build_params(p, "vw", "vw-golf-variant") == {
+        "brands": "vw", "models": "vw-golf-variant", "fuelType": "benzin",
+        "bodyTypes": "kombi", "maxPrice": 200000}
+
+
+def test_dwa_one_request_per_model_and_fetch_by_id():
+    seen = []
+
+    def handler(request):
+        params = dict(request.url.params)
+        seen.append(params)
+        if "vehicleIds" in params:
+            content = [DWA_ITEM] if params["vehicleIds"] == "0202800435" else []
+            return httpx.Response(200, json={"count": len(content), "resultListPage": {"content": content}})
+        return httpx.Response(200, json={"count": 1, "resultListPage": {"content": [DWA_ITEM]}})
+
+    c = DasWeltAutoCollector(HTTP, CollectionSettings(), {"models": {
+        "volkswagen:golf-variant": {"brand": "vw", "models": ["vw-golf-variant", "vw-golf-variant-8-fl"]}}})
+    c._client._client = httpx.Client(base_url="https://x", transport=httpx.MockTransport(handler))
+    result = c.search(SearchProfile(name="p", models=["volkswagen:golf-variant"]))
+    assert [s["models"] for s in seen] == ["vw-golf-variant", "vw-golf-variant-8-fl"]
+    assert all(s["brands"] == "vw" for s in seen)          # models alone would be ignored
+    assert len(result.listings) == 1 and result.complete
+    assert c.fetch("0202800435").source_id == "0202800435"
+    assert c.fetch("0000000000") is None
+
+
+# --- Louda ------------------------------------------------------------------------------
+
+LOUDA_CAR = {
+    "id": 63560, "name": "HYUNDAI I30 Trikolor 1.6 MPI 88 kW manuál", "manufacturer": "Hyundai",
+    "model": "i30 combi", "yearOfProduction": 2012, "mileage": 80332, "performace": 88,
+    "engineVolume": 1.6, "fuelType": "Benzín", "transmissionType": "Manuální", "price": 144990,
+    "carWiseUrl": "/koupit/hyundai-i30-trikolor-16-mpi-88-kw-manual-63560", "pictureList": ["https://p/1"],
+}
+
+
+def test_louda_filter_and_parse():
+    p = SearchProfile(name="p", models=[], fuel=["benzin"], body=["kombi"], price_max=200000)
+    flt = build_filter(p, {"make": "Hyundai", "models": ["I30", "I30 COMBI"]})
+    assert flt["Manufacturers"] == [{"Name": "Hyundai", "Models": ["I30", "I30 COMBI"]}]
+    assert (flt["FuelTypes"], flt["BodyTypes"], flt["Prices"]["PriceTo"]) == (["Benzín"], ["Kombi"], 200000)
+    l = louda_parse_car(LOUDA_CAR, "hyundai:i30", "kombi")
+    assert (l.source_id, l.year, l.mileage_km, l.power_kw, l.engine_cc, l.fuel, l.gearbox, l.body) == (
+        "63560", 2012, 80332, 88, 1600, "benzin", "manualni", "kombi")
+    assert l.url == "https://autolouda.cz/koupit/hyundai-i30-trikolor-16-mpi-88-kw-manual-63560"
+
+
+def test_louda_paging_and_gone():
+    pages = {1: [LOUDA_CAR], 2: [{**LOUDA_CAR, "id": 2}]}
+
+    def handler(request):
+        if request.method == "GET":
+            gone = "x-1" in request.url.path
+            title = "Vozidlo již není v nabídce | Louda Auto+" if gone else "HYUNDAI I30 1.6 | Louda Auto+"
+            return httpx.Response(200, text=f"<title>{title}</title><p>Výkon 88 kW</p>")
+        page = json.loads(request.content)["FilterResult"]["Page"]
+        return httpx.Response(200, json={"FilterResult": {"TotalCarsCount": 2}, "Cars": pages[page]})
+
+    c = LoudaCollector(HTTP, CollectionSettings(), {"models": {"hyundai:i30": {"make": "Hyundai", "models": ["I30"]}}})
+    c._client._client = httpx.Client(base_url="https://x", transport=httpx.MockTransport(handler))
+    result = c.search(SearchProfile(name="p", models=["hyundai:i30"], body=["kombi"]))
+    assert sorted(l.source_id for l in result.listings) == ["2", "63560"] and result.complete
+    assert c.fetch("1") is None
+    live = c.fetch("63560")
+    assert live.is_active and live.power_kw == 88 and live.price_czk is None   # merge keeps stored price
+    assert louda_detail("<title>Vozidlo již není v nabídce | Louda</title>", "1") is None
+
+
+# --- Klokočka ---------------------------------------------------------------------------
+
+KLO_CARD = """<article class="car | card" data-car-id="4233" data-car-type="sale"> <div class="card-head">
+<img class="img-responsive lazyload-img" src="t.jpg" data-lazyload="https://autoklokocka.cz/getFile/id:1/type:small/a.jpg" /></div>
+<div class="card-body | flex-column | text-center"> <h3 class="text-h5"> <a class="card-link" href="/nabidka-vozu/vuz/ojete-skoda-octavia-1-6-mpi-2017-1">Škoda Octavia 1,6 MPI Ambition</a> </h3>
+<div class="flow flow-space-3xs"> <p class="text-h4">189 900 Kč</p> <p class="text-s color-grey-100">156 942 Kč bez DPH</p> </div> </div>
+<div class="card-foot"> <ul class="flex-row | text-s text-center" role="list"> <li class="flex-grow">Benzín</li> <li class="flex-grow">98 643 km</li> <li class="flex-grow">2017</li> </ul> </div>
+</article>"""
+
+
+def test_klokocka_card_and_params():
+    cards = klo_list("<div>Celkem 1 vůz</div>" + KLO_CARD)
+    l = listing_from_card(cards[0], "skoda:octavia")
+    assert (l.source_id, l.title, l.price_czk, l.year, l.mileage_km, l.fuel, l.engine_cc) == (
+        "ojete-skoda-octavia-1-6-mpi-2017-1", "Škoda Octavia 1,6 MPI Ambition", 189900, 2017,
+        98643, "benzin", 1600)
+    assert not l.has_details
+    p = SearchProfile(name="p", models=[], fuel=["benzin"], body=["kombi"], gearbox=["manualni"])
+    assert klo_params(p) == [("stav[]", "ojete"), ("palivo[]", "benzin"), ("karoserie[]", "kombi"),
+                             ("razeni[]", "manualni")]
+
+
+def test_klokocka_paging_and_gone():
+    def handler(request):
+        if "/vuz/" in request.url.path:
+            return httpx.Response(404, text="not found")
+        page = int(request.url.params.get("page", 1))
+        card = KLO_CARD.replace("2017-1", f"2017-{page}")
+        return httpx.Response(200, text=f"<div>Celkem 2 vozů</div>{card}")
+
+    c = KlokockaCollector(HTTP, CollectionSettings(), {"models": {"skoda:octavia": {"brand": "skoda", "model": "octavia"}}})
+    c._client._client = httpx.Client(base_url="https://x", transport=httpx.MockTransport(handler))
+    result = c.search(SearchProfile(name="p", models=["skoda:octavia"]))
+    assert sorted(l.source_id for l in result.listings) == [
+        "ojete-skoda-octavia-1-6-mpi-2017-1", "ojete-skoda-octavia-1-6-mpi-2017-2"]
+    assert result.complete
+    assert c.fetch("gone") is None

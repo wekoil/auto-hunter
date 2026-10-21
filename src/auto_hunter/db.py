@@ -306,12 +306,34 @@ class Database:
             params.append(seen_before)
         return self.conn.execute(sql, params).fetchall()
 
-    def same_vehicle(self, listing_id: int, vin: str) -> list[sqlite3.Row]:
-        """Other active listings with the same VIN, e.g. the same car on another site."""
-        return self.conn.execute(
-            """SELECT source, price_czk, url FROM listings
-               WHERE vin = ? AND id != ? AND status = 'active'""", (vin, listing_id),
-        ).fetchall()
+    def same_vehicle(self, listing_id: int, vin: str | None) -> list[sqlite3.Row]:
+        """Active listings on other sources that are (probably) the same car.
+
+        Matched by full VIN when known; otherwise by an exact fingerprint of model,
+        year and mileage, since several dealer sites (Louda, Klokočka) publish no VIN
+        but mirror their stock elsewhere. `match` says which rule applied.
+        """
+        row = self.conn.execute(
+            "SELECT source, model_key, year, mileage_km FROM listings WHERE id = ?", (listing_id,)
+        ).fetchone()
+        matches = []
+        if vin:
+            matches += self.conn.execute(
+                """SELECT source, price_czk, url, 'vin' AS match FROM listings
+                   WHERE vin = ? AND id != ? AND source != ? AND status = 'active'""",
+                (vin, listing_id, row["source"]),
+            ).fetchall()
+        # An exact odometer reading is specific enough only for real mileages. Two
+        # listings that both have full VINs are compared by VIN alone (above).
+        if row["model_key"] and row["year"] and (row["mileage_km"] or 0) >= 1000:
+            matches += self.conn.execute(
+                """SELECT source, price_czk, url, 'fingerprint' AS match FROM listings
+                   WHERE model_key = ? AND year = ? AND mileage_km = ? AND id != ?
+                     AND source != ? AND status = 'active'
+                     AND (? IS NULL OR vin IS NULL OR vin LIKE '%XXX%' OR length(vin) != 17)""",
+                (row["model_key"], row["year"], row["mileage_km"], listing_id, row["source"], vin),
+            ).fetchall()
+        return list({m["url"]: m for m in matches}.values())
 
     # --- collector state ------------------------------------------------------------
 

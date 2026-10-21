@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -59,3 +60,19 @@ class Listing:
     has_details: bool = False
     # Original source payload, kept so we can re-normalize later without recollecting.
     raw: dict[str, Any] = field(default_factory=dict)
+
+
+def merge_listings(base: Listing, update: Listing) -> Listing:
+    """`update`, with anything it doesn't state taken from `base`.
+
+    Used when a detail page or recheck carries different fields than the listing we
+    already have (e.g. Klokočka's detail page has power but not mileage), so that a
+    less complete response never blanks known data.
+    """
+    merged = dataclasses.replace(update)
+    for f in dataclasses.fields(Listing):
+        value = getattr(merged, f.name)
+        if value is None or (f.name == "image_urls" and not value):
+            setattr(merged, f.name, getattr(base, f.name))
+    merged.raw = {**base.raw, **update.raw}
+    return merged

@@ -1,15 +1,22 @@
 # auto-hunter
 
-Personal used-car monitor for the Czech market. It regularly searches
-[sauto.cz](https://www.sauto.cz), [skodaplus.cz](https://www.skodaplus.cz) and
-[auto.bazos.cz](https://auto.bazos.cz), keeps every listing's price history in SQLite,
-and alerts you (Telegram or console) about new listings and price drops.
+Personal used-car monitor for the Czech market. It regularly searches six marketplaces
+and dealer networks, keeps every listing's price history in SQLite, and alerts you
+(Telegram or console) about new listings and price drops.
 
 | Source | Access | Data | Coverage |
 |---|---|---|---|
-| Sauto | public JSON API | structured | full scan each run |
-| Škoda Plus | public GraphQL API (Czech stock only) | structured, rich (VIN, accident flag) | full scan each run |
-| Bazoš | category pages (search URLs are disallowed by robots.txt) | free text, parsed | incremental: new and bumped listings |
+| [Sauto](https://www.sauto.cz) | public JSON API | structured, VIN often | full scan each run |
+| [Škoda Plus](https://www.skodaplus.cz) | public GraphQL API (Czech stock only) | structured, VIN, accident flag | full scan each run |
+| [Das WeltAuto](https://www.dasweltauto.cz) | public JSON API | structured, VIN | full scan each run |
+| [Louda Auto](https://autolouda.cz) | catalogue JSON API | structured, no VIN | full scan each run |
+| [Autosalon Klokočka](https://autoklokocka.cz) | server-rendered pages | cards + detail pages, no VIN | full scan each run |
+| [Bazoš](https://auto.bazos.cz) | category pages (search URLs are disallowed by robots.txt) | free text, parsed | incremental: new and bumped listings |
+
+Dealer stock is widely mirrored onto Sauto, so the same car often appears twice. Matches
+are flagged by VIN, or, for dealers that publish none, by an exact model + year +
+mileage fingerprint. TipCars is not collected: it refuses automated clients (HTTP 403)
+and its robots.txt disallows the Czech section.
 
 This is the MVP (phase 1): data collection and history, no AI yet. Later phases
 add AI listing analysis, market valuation and ranking.
@@ -64,15 +71,15 @@ uv run auto-hunter reassess             # re-label stored listings after config 
 
 The first `collect` for a profile on each source builds the baseline and sends no
 "new listing" alerts; later runs alert on genuinely new listings and on price drops of
-at least `alerts.min_price_drop_pct`. The same car on two sites (same VIN) is flagged
-with the other listing's price.
+at least `alerts.min_price_drop_pct`. The same car on two sites is flagged with the other
+listing's price.
 
 ## How it works
 
-1. **Search** – each source is collected in turn. Sauto and Škoda Plus get the profile's
-   make/model, price, mileage, fuel, gearbox and body filters server-side. Bazoš brand
-   categories are read newest-first until the previous crawl's position, and specs
-   are parsed from the text.
+1. **Search** – each source is collected in turn. Structured sources get the profile's
+   make/model, price, mileage, fuel, gearbox and body filters server-side where they
+   support them. Bazoš brand categories are read newest-first until the previous
+   crawl's position, and specs are parsed from the text.
 2. **Local filters and classification** – year range, title keywords (e.g. "havarovaný"),
    generation and engine are checked locally. Identical queries from several profiles
    are fetched once.
