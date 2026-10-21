@@ -26,12 +26,13 @@ src/auto_hunter/
   db.py               SQLite schema and storage
   notify.py           alert formatting and delivery
   report.py           text reports
+  browse.py           local read-only web viewer
 tests/
 deploy/
 ```
 
 Dependencies point one way: `cli → pipeline → (collectors, classify, filters, evaluate,
-db) → config, models`. `report` and `notify` only read results.
+db) → config, models`. `report`, `browse` and `notify` only read results.
 
 ---
 
@@ -49,6 +50,7 @@ database, and dispatches:
 | `history <id>` | `report.history_report` | no |
 | `market` | `report.market_report` | no |
 | `reassess` | `pipeline.reassess` | no |
+| `browse [--host H] [--port N] [--no-open]` | `browse.serve` | no |
 
 `collect` exits with status 1 only if every source had errors *and* saw nothing, so a
 systemd timer surfaces total failures without failing on a single flaky request or
@@ -341,6 +343,27 @@ Read-only text reports:
 - `market_report`: asking-price quartiles, median year and mileage per generation and
   engine, plus the last five runs.
 
+`market_groups`, `recent_changes` and `rank_key` hold the data behind these reports, so
+`browse.py` shows the same numbers and the same shortlist order.
+
+## browse.py
+
+`auto-hunter browse` serves the database as local web pages on `127.0.0.1:8080`, using
+only the standard library (`http.server`, inline CSS and SVG, no JavaScript framework).
+Each request opens its own `Database(path, readonly=True)` connection: no schema
+creation and no migrations, and any write raises. A `collect` run can therefore use the
+database at the same time.
+
+| Page | Shows |
+|---|---|
+| `/` | Listings table, in shortlist order by default. Filters for status, source, profile, model, generation, engine, tier, confidence, flag, price/km/year ranges, price dropped, also listed elsewhere. Search is case- and accent-insensitive over title, description, seller, place and ad id. Column headers sort. Filters live in the URL, so a view can be bookmarked. |
+| `/listing/<id>` | Photos, specs, assessment and flags, the same car on other sites, a price history chart with every snapshot, the original description and the raw source payload. |
+| `/overview` | `market_groups`, changes over the last 1/7/30 days, and the last 30 collection runs with their errors. |
+
+`render(db, config, target)` maps a request path to `(status, html)`, so tests can
+call it without a server. The UI is English; listing text is shown exactly as
+published. All values are HTML-escaped.
+
 ---
 
 ## tests/
@@ -352,6 +375,7 @@ Run with `uv run pytest`. No test touches the network.
 | `test_pipeline.py` | Full runs against fake collectors and an in-memory DB: baseline without alerts, price-drop history and alerts, removal vs unmatched, failed search skipping removals, remembering detail rejections, details not erased by later search results; incremental sources (absence isn't removal, stale recheck finds removals and price drops, snippets don't overwrite detail specs), per-source baselines, same-VIN flag, persisted collector state. |
 | `test_filters_and_parsing.py` | Sauto item parsing, search parameters, plain filters, keyword word-boundary matching, and the collector's model guard and query cache (via `httpx.MockTransport`). |
 | `test_sources.py` | Bazoš list/detail parsing (markup copied from the site), model/country/body/fuel filtering, model order, the crawl stop rule and first-crawl cap, gone vs live detection; Škoda Plus parsing, id resolution, Czech-only filter and paging; Das WeltAuto params, one request per model, fetch by id; Louda filter, parsing, paging, "no longer offered" pages; Klokočka cards, params, paging, 404. |
+| `test_browse.py` | Viewer pages against a file database opened read-only: writes rejected, default active filter, accent-insensitive search over descriptions, price/drop filters, sorting, detail history and original text, overview, 404s, HTML escaping. |
 | `test_textspecs.py` | Free-text extraction against real ad phrasing, including every trap listed above. |
 | `test_classify_evaluate.py` | Classification against the **real** `config/catalog.yaml` (changeover years, power, title hints, turbo keywords), profile routing, `avoid` handling, profile resolution, and assessment flags/confidence. |
 

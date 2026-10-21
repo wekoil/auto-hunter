@@ -18,11 +18,12 @@ def _fmt_km(km: int | None) -> str:
     return f"{km:>7,}".replace(",", " ") if km is not None else "      ?"
 
 
-def changes_report(db: Database, days: float) -> str:
-    """New, changed, removed and reactivated listings over the last `days` days."""
+def recent_changes(db: Database, days: float) -> list:
+    """New, changed, removed and reactivated snapshots over the last `days` days."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
-    rows = db.conn.execute(
-        """SELECT s.event, s.observed_at, s.price_czk, l.title, l.year, l.mileage_km, l.url,
+    return db.conn.execute(
+        """SELECT s.event, s.observed_at, s.price_czk, l.id AS listing_id, l.title, l.year,
+                  l.mileage_km, l.url,
                   (SELECT p.price_czk FROM listing_snapshots p
                    WHERE p.listing_id = s.listing_id AND p.observed_at < s.observed_at
                    ORDER BY p.observed_at DESC, p.id DESC LIMIT 1) AS prev_price
@@ -32,6 +33,11 @@ def changes_report(db: Database, days: float) -> str:
            ORDER BY s.event, s.price_czk""",
         (since,),
     ).fetchall()
+
+
+def changes_report(db: Database, days: float) -> str:
+    """New, changed, removed and reactivated listings over the last `days` days."""
+    rows = recent_changes(db, days)
     if not rows:
         return f"No changes in the last {days:g} day(s)."
     out = [f"Changes in the last {days:g} day(s)"]
@@ -89,31 +95,44 @@ def _quartiles(values: list[int]) -> tuple[int, int, int]:
     return int(q[0]), int(q[1]), int(q[2])
 
 
-def market_report(db: Database, config: Config) -> str:
-    """Asking-price spread of active listings per generation and engine."""
+def market_groups(db: Database, config: Config) -> list[dict]:
+    """Asking-price quartiles, median year and median km per (generation, engine)."""
     rows = db.conn.execute(
         """SELECT l.model, l.year, l.price_czk, l.mileage_km, a.generation, a.engine
            FROM listings l JOIN listing_assessments a ON a.listing_id = l.id
            WHERE l.status = 'active' AND l.price_czk IS NOT NULL"""
     ).fetchall()
-    if not rows:
-        return "No active listings yet. Run `auto-hunter collect` first."
     cat = config.catalog
     groups: dict[tuple[str, str], list] = {}
     for r in rows:
         gen = cat.generations[r["generation"]].label if r["generation"] else f"{r['model']} (gen ?)"
         eng = cat.engines[r["engine"]].label if r["engine"] else "engine ?"
         groups.setdefault((gen, eng), []).append(r)
-    out = [f"{'generation':<28}{'engine':<22}{'n':>4}{'p25':>10}{'median':>10}{'p75':>10}"
-           f"{'med yr':>7}{'med km':>9}"]
+    out = []
     for (gen, eng), items in sorted(groups.items()):
         p25, med, p75 = _quartiles(sorted(i["price_czk"] for i in items))
         years = [i["year"] for i in items if i["year"]]
         kms = [i["mileage_km"] for i in items if i["mileage_km"] is not None]
+        out.append({"generation": gen, "engine": eng, "n": len(items),
+                    "p25": p25, "median": med, "p75": p75,
+                    "median_year": int(statistics.median(years)) if years else None,
+                    "median_km": int(statistics.median(kms)) if kms else None})
+    return out
+
+
+def market_report(db: Database, config: Config) -> str:
+    """Asking-price spread of active listings per generation and engine."""
+    groups = market_groups(db, config)
+    if not groups:
+        return "No active listings yet. Run `auto-hunter collect` first."
+    out = [f"{'generation':<28}{'engine':<22}{'n':>4}{'p25':>10}{'median':>10}{'p75':>10}"
+           f"{'med yr':>7}{'med km':>9}"]
+    for g in groups:
         out.append(
-            f"{gen[:27]:<28}{eng[:21]:<22}{len(items):>4}{_fmt_price(p25):>10}{_fmt_price(med):>10}"
-            f"{_fmt_price(p75):>10}{int(statistics.median(years)) if years else '?':>7}"
-            f"{_fmt_km(int(statistics.median(kms))) if kms else '?':>9}"
+            f"{g['generation'][:27]:<28}{g['engine'][:21]:<22}{g['n']:>4}"
+            f"{_fmt_price(g['p25']):>10}{_fmt_price(g['median']):>10}{_fmt_price(g['p75']):>10}"
+            f"{g['median_year'] or '?':>7}"
+            f"{_fmt_km(g['median_km']) if g['median_km'] is not None else '?':>9}"
         )
     out.append("\nAdvertised prices only; actual selling prices are typically lower.")
     runs = db.conn.execute(
@@ -129,6 +148,16 @@ def market_report(db: Database, config: Config) -> str:
 
 
 _CONFIDENCE_ORDER = {"high": 0, "medium": 1, "low": 2}
+
+
+def rank_key(assessment: dict, profiles: list[str], price: int | None,
+             priority_of: dict[str, int]) -> tuple:
+    """Shortlist order: profile priority, confidence, number of cautions, then price."""
+    cautions = sum(f["severity"] == "caution" for f in assessment["flags"])
+    best_priority = min((priority_of.get(p, len(PRIORITIES)) for p in profiles),
+                        default=len(PRIORITIES))
+    return (best_priority, _CONFIDENCE_ORDER[assessment["confidence"]], cautions,
+            price if price is not None else 10**9)
 
 
 def shortlist_report(db: Database, config: Config, limit: int = 25,
@@ -154,9 +183,7 @@ def shortlist_report(db: Database, config: Config, limit: int = 25,
             continue
         a = json.loads(r["assessment"])
         cautions = [f for f in a["flags"] if f["severity"] == "caution"]
-        best_priority = min((priority_of.get(p, len(PRIORITIES)) for p in profiles))
-        key = (best_priority, _CONFIDENCE_ORDER[a["confidence"]], len(cautions),
-               r["price_czk"] if r["price_czk"] is not None else 10**9)
+        key = rank_key(a, profiles, r["price_czk"], priority_of)
         entries.append((key, r, a, cautions, profiles))
     if not entries:
         return "No active listings match."

@@ -1,7 +1,7 @@
 """Command-line entry point (`auto-hunter`, defined in pyproject.toml).
 
-Commands: collect, shortlist, report, history, market, reassess. Only `collect` touches
-the network; the rest read the database. Run from the repo root, or pass --config-dir.
+Commands: collect, shortlist, report, history, market, reassess, browse. Only `collect`
+touches the network; the rest read the database (`browse` serves it as local web pages). Run from the repo root, or pass --config-dir.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from auto_hunter import report
+from auto_hunter import browse, report
 from auto_hunter.collectors import build_collectors
 from auto_hunter.config import load_config
 from auto_hunter.db import Database
@@ -46,6 +46,12 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("market", help="Asking-price spread per generation and engine")
     sub.add_parser("reassess", help="Re-label stored listings after editing catalog/evaluation")
 
+    p_browse = sub.add_parser("browse", help="Look through the database in your web browser")
+    p_browse.add_argument("--host", default="127.0.0.1",
+                          help="Interface to listen on (default: this computer only)")
+    p_browse.add_argument("--port", type=int, default=8080)
+    p_browse.add_argument("--no-open", action="store_true", help="Don't open a browser tab")
+
     args = parser.parse_args(argv)
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -58,6 +64,14 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.reconfigure(encoding="utf-8")
     load_dotenv()
     config = load_config(args.config_dir)
+    if args.command == "browse":
+        # Opened read-only per request, so it must already exist and is never migrated.
+        if not config.settings.database_path.exists():
+            parser.error(f"No database at {config.settings.database_path}; "
+                         "run `auto-hunter collect` first")
+        browse.serve(config.settings.database_path, config, args.host, args.port,
+                     open_browser=not args.no_open)
+        return 0
     db = Database(config.settings.database_path)
     try:
         if args.command == "collect":

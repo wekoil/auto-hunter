@@ -165,8 +165,16 @@ class UpsertResult:
 class Database:
     """Thin wrapper over one SQLite connection. Callers decide when to commit()."""
 
-    def __init__(self, path: Path | str) -> None:
-        """Open (creating if needed) the database at path, or ":memory:" for tests."""
+    def __init__(self, path: Path | str, readonly: bool = False) -> None:
+        """Open (creating if needed) the database at path, or ":memory:" for tests.
+
+        readonly opens an existing file as-is: no schema creation, no migrations, and
+        any write raises. `browse` uses it so it can never touch collected data.
+        """
+        if readonly:
+            self.conn = sqlite3.connect(f"{Path(path).resolve().as_uri()}?mode=ro", uri=True)
+            self.conn.row_factory = sqlite3.Row
+            return
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(path)

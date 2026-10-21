@@ -31,6 +31,7 @@ cli.py collect ──► for each enabled source in sources.yaml: pipeline.colle
                      └─ removal / recheck     full scan: vanished → check; Bazoš: stale → check
                    then notify.py             Telegram / console alerts from all sources
 cli.py shortlist|report|market|history ──► report.py ──► db.py (read only)
+cli.py browse ──► browse.py (local web pages) ──► report.py, db.py (read only)
 ```
 
 ## Design principles

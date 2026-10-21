@@ -67,7 +67,13 @@ uv run auto-hunter report --days 7      # new / changed / removed listings
 uv run auto-hunter market               # asking-price spread per generation and engine
 uv run auto-hunter history 211125480    # price history and assessment of one listing
 uv run auto-hunter reassess             # re-label stored listings after config edits
+uv run auto-hunter browse               # look through the database at http://localhost:8080
 ```
+
+`browse` opens a local, read-only web viewer: a filterable and sortable listings table,
+a page per listing with photos, price history chart and the original description, and
+an overview of market prices, recent changes and collection runs. It only listens on
+this computer unless you pass `--host`.
 
 The first `collect` for a profile on each source builds the baseline and sends no
 "new listing" alerts; later runs alert on genuinely new listings and on price drops of
