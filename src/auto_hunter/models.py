@@ -2,8 +2,16 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
+
+_VIN_RE = re.compile(r"[A-HJ-NPR-Z0-9]{17}")
+
+
+def is_real_vin(vin: str | None) -> bool:
+    """A full, unmasked VIN. Sellers often mask part of it (e.g. 'WVWZZZXXXXXXXX259')."""
+    return bool(vin and _VIN_RE.fullmatch(vin.upper()) and "XXX" not in vin.upper())
 
 
 @dataclass
@@ -42,6 +50,7 @@ class Listing:
     description: str | None = None
     service_book: bool | None = None
     first_owner: bool | None = None
+    damaged: bool | None = None  # source reports previous accident damage
     image_urls: list[str] = field(default_factory=list)
     source_created_at: str | None = None
     # Whether the source still shows the listing (only known from a detail fetch).

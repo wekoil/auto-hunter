@@ -7,8 +7,12 @@ strings (`2026-10-20T17:48:50+00:00`), so text comparison sorts correctly.
 listings ─┬─< listing_snapshots     (history, append-only)
           ├─< listing_profiles      (which profiles matched)
           └── listing_assessments   (derived labels, 1:1, recomputable)
-collection_runs                      (one row per collect)
+collection_runs                      (one row per source per collect)
+source_state                         (collector bookkeeping, e.g. Bazoš crawl position)
 ```
+
+Sources: `sauto`, `skodaplus`, `bazos`. The same car on two sites is two listings;
+when both publish the full VIN they're linked by an `also_listed` flag (see below).
 
 ## listings
 
@@ -16,11 +20,11 @@ Current state of each advertisement, unique on `(source, source_id)`.
 
 | Columns | Notes |
 |---|---|
-| `source`, `source_id`, `url` | e.g. `sauto`, `211125480` |
+| `source`, `source_id`, `url` | e.g. `sauto`/`211125480`, `skodaplus`/`Car-10630466`, `bazos`/`225351954` |
 | `title`, `variant`, `make`, `model`, `model_key` | `model_key` = `skoda:octavia` |
 | `price_czk`, `mileage_km`, `year`, `manufacturing_date` | price NULL = "by agreement" |
 | `fuel`, `gearbox`, `body`, `power_kw`, `engine_cc` | Sauto SEO names; detail-only fields may be NULL until fetched |
-| `vin`, `service_book`, `first_owner`, `description` | detail only |
+| `vin`, `service_book`, `first_owner`, `damaged`, `description` | detail only; `damaged` only from Škoda Plus. Bazoš values are parsed from text |
 | `seller_type`, `seller_name`, `region`, `district`, `municipality` | `dealer` / `private` |
 | `image_urls` | JSON array |
 | `status` | see below |
@@ -36,6 +40,11 @@ Current state of each advertisement, unique on `(source, source_id)`.
 | `removed` | The source no longer has it | `active` if it reappears |
 
 `removed` does **not** mean sold: it can also be withdrawn or relisted under a new id.
+Bazoš listings also expire automatically after about two months.
+
+For Bazoš, `last_seen_at` is when the listing last appeared in a crawl or recheck. Since
+crawls only see new and bumped listings, a quiet listing is re-fetched once it's older
+than `recheck_after_days`.
 
 ## listing_snapshots
 
@@ -60,9 +69,15 @@ The latest evaluation per listing: `generation`, `engine` (set only when unambig
 `price_tier`, `confidence`, and `data` (full JSON including candidates and flags).
 Overwritten on each run and by `auto-hunter reassess`. Never the only copy of anything.
 
+## source_state
+
+One row per source: `state` (JSON owned by the collector) and `updated_at`. Bazoš keeps
+`{"seen": {"<category>": [recent ids...]}}` there for its crawl stop rule. Deleting
+a source's row makes its next crawl behave like the first one.
+
 ## collection_runs
 
-`started_at`, `finished_at`, `status` (`running` = crashed or still going, `ok`,
+`source`, `started_at`, `finished_at`, `status` (`running` = crashed or still going, `ok`,
 `partial` = some errors, `failed` = errors and nothing matched), counts, and `errors`
 (JSON array). Check this table to see whether scheduled runs are healthy.
 
@@ -106,6 +121,13 @@ WHERE l.status = 'active'
 
 Run health:
 ```sql
-SELECT started_at, status, seen, new, changed, removed, errors
+SELECT source, started_at, status, seen, new, changed, removed, errors
 FROM collection_runs ORDER BY id DESC LIMIT 10;
+```
+
+The same car on several sites, with each asking price:
+```sql
+SELECT vin, GROUP_CONCAT(source || ': ' || price_czk, ', ') AS offers
+FROM listings WHERE status = 'active' AND vin IS NOT NULL AND vin NOT LIKE '%XXX%'
+GROUP BY vin HAVING COUNT(DISTINCT source) > 1;
 ```

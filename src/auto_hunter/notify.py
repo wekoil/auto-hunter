@@ -46,7 +46,7 @@ def format_alert(alert: Alert) -> str:
     for f in a.flags:
         if not f.code.startswith("tier_"):
             lines.append(("⚠️ " if f.severity == "caution" else "ℹ️ ") + f.message)
-    lines.append(f"[{', '.join(alert.profiles)}] {l.url}")
+    lines.append(f"[{l.source}: {', '.join(alert.profiles)}] {l.url}")
     return "\n".join(lines)
 
 

@@ -117,12 +117,13 @@ def market_report(db: Database, config: Config) -> str:
         )
     out.append("\nAdvertised prices only; actual selling prices are typically lower.")
     runs = db.conn.execute(
-        "SELECT started_at, status, seen, new, changed, removed FROM collection_runs "
-        "ORDER BY id DESC LIMIT 5"
+        "SELECT source, started_at, status, seen, new, changed, removed FROM collection_runs "
+        "ORDER BY id DESC LIMIT 6"
     ).fetchall()
     out.append("\nRecent runs:")
     for r in runs:
-        out.append(f"  {r['started_at']}  {r['status']:<8} seen={r['seen']} new={r['new']} "
+        out.append(f"  {r['started_at']}  {r['source'] or '?':<10} {r['status']:<8} "
+                   f"seen={r['seen']} new={r['new']} "
                    f"changed={r['changed']} removed={r['removed']}")
     return "\n".join(out)
 
@@ -169,11 +170,14 @@ def shortlist_report(db: Database, config: Config, limit: int = 25,
         out.append(
             f"{_fmt_price(r['price_czk'])} Kč  {a['price_tier'] or '-':<8} {r['year'] or '?'}  "
             f"{_fmt_km(r['mileage_km'])} km  conf={a['confidence']:<6} {r['title']}\n"
-            f"    {gen} · {eng} · {r['gearbox'] or '?'} · {r['district'] or '?'} · "
-            f"{','.join(profiles)}"
+            f"    {gen} · {eng} · {r['gearbox'] or '?'} · "
+            f"{r['district'] or r['municipality'] or '?'} · {r['source']} · {','.join(profiles)}"
         )
         for f in cautions:
             out.append(f"    ⚠ {f['message']}")
+        for f in a["flags"]:
+            if f["code"] == "also_listed":
+                out.append(f"    ↔ {f['message']}")
         out.append(f"    {r['url']}")
     out.append(f"\n{len(entries)} active listings; showing {min(limit, len(entries))}.")
     return "\n".join(out)

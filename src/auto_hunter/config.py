@@ -67,6 +67,7 @@ class Requirements:
 
     fuel: list[str] = field(default_factory=list)
     body: list[str] = field(default_factory=list)
+    price_min: int | None = None
     price_max: int | None = None
     mileage_max: int | None = None
     exclude_keywords: list[str] = field(default_factory=list)
@@ -173,6 +174,11 @@ class Config:
     catalog: Catalog
     evaluation: EvaluationRules
     profiles: list[SearchProfile]
+    # sources.yaml: per-marketplace sections, interpreted by each collector.
+    sources: dict[str, dict[str, Any]] = field(default_factory=lambda: {"sauto": {}})
+
+    def enabled_sources(self) -> list[str]:
+        return [name for name, cfg in self.sources.items() if (cfg or {}).get("enabled", True)]
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -257,6 +263,7 @@ def resolve_profile(raw: dict[str, Any], req: Requirements, catalog: Catalog) ->
         name=name,
         models=models,
         priority=priority,
+        price_min=raw.pop("price_min", req.price_min),
         price_max=raw.pop("price_max", req.price_max),
         mileage_max=raw.pop("mileage_max", req.mileage_max),
         year_min=year_min,
@@ -266,7 +273,7 @@ def resolve_profile(raw: dict[str, Any], req: Requirements, catalog: Catalog) ->
         exclude_keywords=[*req.exclude_keywords, *raw.pop("exclude_keywords", [])],
         generations=gen_ids,
         engines=engine_ids,
-        **raw,  # price_min, gearbox
+        **raw,  # gearbox
     )
     if req.price_max is not None and (profile.price_max or 0) > req.price_max:
         raise ValueError(f"Profile {name!r}: price_max exceeds the global budget")
@@ -284,4 +291,12 @@ def load_config(config_dir: Path) -> Config:
     names = [p.name for p in profiles]
     if len(names) != len(set(names)):
         raise ValueError("Duplicate profile names in profiles.yaml")
-    return Config(settings, requirements, catalog, evaluation, profiles)
+    sources_path = config_dir / "sources.yaml"
+    sources = _read(sources_path) if sources_path.exists() else {"sauto": {}}
+    for name, cfg in sources.items():
+        for key, mapping in ((cfg or {}).get("models") or {}).items():
+            if ":" not in key:
+                raise ValueError(f"sources.yaml {name}: model {key!r} must be 'make:model'")
+            if "title" in mapping:
+                re.compile(mapping["title"])
+    return Config(settings, requirements, catalog, evaluation, profiles, sources)

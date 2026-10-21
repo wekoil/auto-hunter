@@ -1,26 +1,30 @@
-"""One collection run: search every profile, store changes, detect removals.
+"""One collection run for one source: search profiles, store changes, detect removals.
 
 Order of work, cheapest first:
-1. search each profile (one API query per model, shared between profiles)
+1. search each profile (one query per model, shared between profiles)
 2. drop listings with cheap local filters + classification from title/year
 3. fetch details only for survivors never fetched before, then re-check them
 4. store state, history snapshot, profile links and assessment; build alerts
-5. if every search was complete, confirm whether vanished listings are really gone
+5. check tracked listings the search didn't return:
+   - full-scan sources (Sauto, Škoda Plus): only if every search was complete;
+     missing means removed or no longer matching
+   - incremental sources (Bazoš): those not seen for recheck_after_days are
+     re-fetched; still online means still tracked, with price changes recorded
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from auto_hunter.classify import classify
 from auto_hunter.collectors.base import Collector, CollectorError
-from auto_hunter.config import Config, SearchProfile, Settings
+from auto_hunter.config import Config, SearchProfile
 from auto_hunter.db import DETAIL_ONLY_FIELDS, Database, row_to_listing
 from auto_hunter.evaluate import Assessment, assess
 from auto_hunter.filters import rejection_reason
-from auto_hunter.models import Listing
+from auto_hunter.models import Listing, is_real_vin
 
 log = logging.getLogger(__name__)
 
@@ -43,8 +47,9 @@ class Alert:
 
 @dataclass
 class RunSummary:
-    """Counts for one run; also written to the collection_runs table."""
+    """Counts for one run of one source; also written to the collection_runs table."""
 
+    source: str = ""
     seen: int = 0
     new: int = 0
     changed: int = 0
@@ -53,123 +58,197 @@ class RunSummary:
     alerts: list[Alert] = field(default_factory=list)
 
 
+class _Run:
+    """State shared by the steps of one collection run."""
+
+    def __init__(self, db: Database, collector: Collector, config: Config,
+                 profiles: list[SearchProfile]) -> None:
+        self.db, self.collector, self.config = db, collector, config
+        self.profiles = profiles
+        self.by_name = {p.name: p for p in profiles}
+        self.now = utcnow()
+        self.summary = RunSummary(source=collector.source)
+        self.detail_budget = config.settings.collection.max_detail_fetches
+        # A profile's first run on a source is the baseline: everything is "new" then,
+        # so it doesn't alert.
+        self.established = db.known_profiles(collector.source)
+
+    def matching_profiles(self, listing: Listing, candidates: list[str]) -> list[str]:
+        cls = classify(listing, self.config.catalog)
+        return [n for n in candidates
+                if rejection_reason(listing, self.by_name[n], cls, self.config.catalog) is None]
+
+    def fetch(self, source_id: str, context: str) -> Listing | None:
+        """Fetch one listing; errors are recorded, and raised as CollectorError."""
+        try:
+            return self.collector.fetch(source_id)
+        except CollectorError as e:
+            self.summary.errors.append(f"{context} {source_id}: {e}")
+            raise
+
+    def store(self, listing: Listing, profile_names: list[str]) -> None:
+        """Save a matching listing, its profiles and assessment; queue alerts."""
+        db, s = self.db, self.summary
+        res = db.upsert_listing(listing, self.now)
+        for name in profile_names:
+            db.link_profile(res.listing_id, name, self.now)
+        duplicates = db.same_vehicle(res.listing_id, listing.vin) if is_real_vin(listing.vin) else []
+        assessment = assess(listing, classify(listing, self.config.catalog), self.config.catalog,
+                            self.config.evaluation, duplicates)
+        db.save_assessment(res.listing_id, assessment, self.now)
+        if res.event == "new":
+            s.new += 1
+            if self.established.intersection(profile_names):
+                s.alerts.append(Alert("new", listing, profile_names, assessment))
+        elif res.event in ("changed", "reactivated"):
+            s.changed += 1
+            if _is_price_drop(res.old_price, res.new_price,
+                              self.config.settings.alerts.min_price_drop_pct):
+                s.alerts.append(Alert("price_drop", listing, profile_names, assessment,
+                                      res.old_price))
+        db.commit()
+
+    def mark_unmatched(self, listing: Listing, existing) -> None:
+        """Remember a non-matching listing so its details aren't paid for again."""
+        if existing is None or existing["status"] == "active":
+            res = self.db.upsert_listing(listing, self.now)
+            self.db.set_status(res.listing_id, "unmatched", self.now)
+            self.db.commit()
+
+
 def collect(db: Database, collector: Collector, config: Config,
             profiles: list[SearchProfile] | None = None) -> RunSummary:
-    """Run one collection over `profiles` (default: all configured profiles).
+    """Run one collection of one source over `profiles` (default: all profiles).
 
     Errors from the source are recorded rather than raised, so one failing model
-    doesn't lose the rest of the run. Removal detection is skipped unless every
-    search was complete; otherwise a network hiccup would mark live cars as removed.
+    doesn't lose the rest of the run. For full-scan sources, removal detection is
+    skipped unless every search was complete; otherwise a network hiccup would mark
+    live cars as removed.
     """
-    profiles =config.profiles if profiles is None else profiles
-    settings, catalog = config.settings, config.catalog
-    now = utcnow()
-    run_id = db.start_run(now)
-    summary = RunSummary()
+    run = _Run(db, collector, config, config.profiles if profiles is None else profiles)
+    s = run.summary
+    run_id = db.start_run(collector.source, run.now)
+    collector.state = db.load_state(collector.source)
     complete = True
     # source_id -> (listing, matching profile names)
     matched: dict[str, tuple[Listing, list[str]]] = {}
 
-    for profile in profiles:
+    for profile in run.profiles:
         try:
             result = collector.search(profile)
         except CollectorError as e:
-            log.error("Profile %s failed: %s", profile.name, e)
-            summary.errors.append(f"{profile.name}: {e}")
+            log.error("%s: profile %s failed: %s", collector.source, profile.name, e)
+            s.errors.append(f"{profile.name}: {e}")
             complete = False
             continue
         complete &= result.complete
         kept = 0
         for listing in result.listings:
-            if rejection_reason(listing, profile, classify(listing, catalog), catalog) is None:
+            if run.matching_profiles(listing, [profile.name]):
                 matched.setdefault(listing.source_id, (listing, []))[1].append(profile.name)
                 kept += 1
-        log.info("%s: %d found, %d kept after local filters", profile.name,
-                 len(result.listings), kept)
+        log.info("%s %s: %d found, %d kept after local filters", collector.source,
+                 profile.name, len(result.listings), kept)
 
-    detail_budget = settings.collection.max_detail_fetches
-    by_name = {p.name: p for p in profiles}
-    # A profile's first run is the baseline: everything is "new", so don't alert on it.
-    established = db.known_profiles()
     for source_id, (listing, profile_names) in matched.items():
         existing = db.get_listing(collector.source, source_id)
         if existing is not None and existing["details_fetched_at"] is not None:
-            for f in DETAIL_ONLY_FIELDS:
-                if getattr(listing, f) is None:
-                    setattr(listing, f, existing[f])
-        elif detail_budget > 0:
-            detail_budget -= 1
+            if collector.summary_is_authoritative:
+                for f in DETAIL_ONLY_FIELDS:
+                    if getattr(listing, f) is None:
+                        setattr(listing, f, existing[f])
+            else:
+                # Keep the specs parsed from the full listing; take only what a
+                # summary reliably carries.
+                stored = row_to_listing(existing)
+                stored.price_czk, stored.title = listing.price_czk, listing.title
+                stored.has_details = False
+                listing = stored
+        elif not listing.has_details and run.detail_budget > 0:
+            run.detail_budget -= 1
             try:
-                detailed = collector.fetch(source_id)
-            except CollectorError as e:
-                summary.errors.append(f"detail {source_id}: {e}")
-                detailed = None
-            if detailed is not None:
-                listing = detailed
+                listing = run.fetch(source_id, "detail") or listing
+            except CollectorError:
+                pass
 
         # Details reveal body, engine specs etc.; re-check what the search couldn't.
-        cls = classify(listing, catalog)
-        profile_names = [n for n in profile_names
-                         if rejection_reason(listing, by_name[n], cls, catalog) is None]
+        profile_names = run.matching_profiles(listing, profile_names)
         if not profile_names:
-            # Remember it as unmatched so we don't pay for its details again next run.
-            if existing is None or existing["status"] == "active":
-                res = db.upsert_listing(listing, now)
-                db.set_status(res.listing_id, "unmatched", now)
-                db.commit()
+            run.mark_unmatched(listing, existing)
             continue
+        s.seen += 1
+        run.store(listing, profile_names)
 
-        summary.seen += 1
-        res = db.upsert_listing(listing, now)
-        for name in profile_names:
-            db.link_profile(res.listing_id, name, now)
-        assessment = assess(listing, cls, catalog, config.evaluation)
-        db.save_assessment(res.listing_id, assessment, now)
-        if res.event == "new":
-            summary.new += 1
-            if established.intersection(profile_names):
-                summary.alerts.append(Alert("new", listing, profile_names, assessment))
-        elif res.event in ("changed", "reactivated"):
-            summary.changed += 1
-            if _is_price_drop(res.old_price, res.new_price, settings.alerts.min_price_drop_pct):
-                summary.alerts.append(
-                    Alert("price_drop", listing, profile_names, assessment, res.old_price))
-        db.commit()
-
-    if complete:
-        summary.removed = _check_vanished(db, collector, set(matched), now, settings, summary)
+    if collector.full_scan:
+        if complete:
+            s.removed = _check_vanished(run, set(matched))
+        else:
+            log.warning("%s: search incomplete; skipping removal detection", collector.source)
     else:
-        log.warning("Search incomplete; skipping removal detection this run")
+        s.removed = _recheck_stale(run, set(matched))
 
-    status = "ok" if not summary.errors else ("partial" if matched else "failed")
-    db.finish_run(run_id, utcnow(), status, summary.seen, summary.new, summary.changed,
-                  summary.removed, summary.errors)
-    return summary
+    db.save_state(collector.source, collector.state, utcnow())
+    status = "ok" if not s.errors else ("partial" if matched else "failed")
+    db.finish_run(run_id, utcnow(), status, s.seen, s.new, s.changed, s.removed, s.errors)
+    return s
 
 
-def _check_vanished(db: Database, collector: Collector, seen_ids: set[str], now: str,
-                    settings: Settings, summary: RunSummary) -> int:
-    """Listings we tracked that no search returned: gone, or just no longer matching?"""
-    vanished = [r for r in db.active_listings(collector.source) if r["source_id"] not in seen_ids]
+def _check_vanished(run: _Run, seen_ids: set[str]) -> int:
+    """Full-scan source: tracked listings no search returned are gone or out of scope."""
+    db, cap = run.db, run.config.settings.collection.max_removal_checks
+    vanished = [r for r in db.active_listings(run.collector.source)
+                if r["source_id"] not in seen_ids]
     removed = 0
-    for row in vanished[: settings.collection.max_removal_checks]:
+    for row in vanished[:cap]:
         try:
-            listing = collector.fetch(row["source_id"])
-        except CollectorError as e:
-            summary.errors.append(f"removal check {row['source_id']}: {e}")
+            listing = run.fetch(row["source_id"], "removal check")
+        except CollectorError:
             continue
         if listing is None or not listing.is_active:
-            db.set_status(row["id"], "removed", now)
+            db.set_status(row["id"], "removed", run.now)
             removed += 1
         else:
-            # Still online but outside our filters (e.g. price raised). Keep its latest
-            # state, then stop re-checking it every run.
-            db.upsert_listing(listing, now)
-            db.set_status(row["id"], "unmatched", now)
+            # Still online but outside our search filters (e.g. price raised). Keep its
+            # latest state, then stop re-checking it every run.
+            db.upsert_listing(listing, run.now)
+            db.set_status(row["id"], "unmatched", run.now)
         db.commit()
-    if len(vanished) > settings.collection.max_removal_checks:
-        log.info("%d vanished listings left for the next run",
-                 len(vanished) - settings.collection.max_removal_checks)
+    if len(vanished) > cap:
+        log.info("%d vanished listings left for the next run", len(vanished) - cap)
+    return removed
+
+
+def _recheck_stale(run: _Run, seen_ids: set[str]) -> int:
+    """Incremental source: re-fetch tracked listings not seen for a while.
+
+    Not appearing in a crawl means nothing here, so each one is checked directly:
+    gone → removed; still online → price/details updated, and kept if it still
+    matches a profile.
+    """
+    db, cap = run.db, run.config.settings.collection.max_removal_checks
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=run.collector.recheck_after_days)
+              ).isoformat(timespec="seconds")
+    stale = [r for r in db.active_listings(run.collector.source, seen_before=cutoff)
+             if r["source_id"] not in seen_ids]
+    removed = 0
+    all_profiles = list(run.by_name)
+    for row in stale[:cap]:
+        try:
+            listing = run.fetch(row["source_id"], "recheck")
+        except CollectorError:
+            continue
+        if listing is None or not listing.is_active:
+            db.set_status(row["id"], "removed", run.now)
+            db.commit()
+            removed += 1
+            continue
+        profile_names = run.matching_profiles(listing, all_profiles)
+        if profile_names:
+            run.store(listing, profile_names)
+        else:
+            run.mark_unmatched(listing, db.get_listing(run.collector.source, row["source_id"]))
+    if len(stale) > cap:
+        log.info("%d stale listings left for the next run", len(stale) - cap)
     return removed
 
 
@@ -189,6 +268,8 @@ def reassess(db: Database, config: Config) -> int:
     for row in rows:
         listing = row_to_listing(row)
         cls = classify(listing, config.catalog)
-        db.save_assessment(row["id"], assess(listing, cls, config.catalog, config.evaluation), now)
+        duplicates = db.same_vehicle(row["id"], listing.vin) if is_real_vin(listing.vin) else []
+        db.save_assessment(
+            row["id"], assess(listing, cls, config.catalog, config.evaluation, duplicates), now)
     db.commit()
     return len(rows)

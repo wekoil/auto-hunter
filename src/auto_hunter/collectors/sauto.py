@@ -15,12 +15,10 @@ Quirks handled here:
 from __future__ import annotations
 
 import logging
-import time
 from typing import Any
 
-import httpx
-
 from auto_hunter.collectors.base import Collector, CollectorError, SearchResult
+from auto_hunter.collectors.http import PoliteClient
 from auto_hunter.config import CollectionSettings, HttpSettings, SearchProfile
 from auto_hunter.models import Listing
 
@@ -36,14 +34,9 @@ class SautoCollector(Collector):
     source = "sauto"
 
     def __init__(self, http: HttpSettings, collection: CollectionSettings) -> None:
-        self._http = http
+        super().__init__()
         self._collection = collection
-        self._client = httpx.Client(
-            base_url=BASE_URL,
-            headers={"User-Agent": http.user_agent, "Accept": "application/json"},
-            timeout=http.timeout_s,
-        )
-        self._last_request = 0.0
+        self._client = PoliteClient(BASE_URL, http, headers={"Accept": "application/json"})
         # Profiles often share a query (same model, same global filters); fetch it once.
         self._query_cache: dict[tuple, tuple[list[dict[str, Any]], bool]] = {}
 
@@ -106,31 +99,13 @@ class SautoCollector(Collector):
     def _get_json(
         self, path: str, params: dict[str, Any] | None = None, allow_404: bool = False
     ) -> Any:
-        """GET with pacing and retries.
-
-        Waits request_delay_s between requests. Retries network errors, 429 and 5xx
-        with exponential backoff; other 4xx fail immediately. Raises CollectorError.
-        """
-        for attempt in range(1, self._http.max_retries + 1):
-            wait = self._http.request_delay_s - (time.monotonic() - self._last_request)
-            if wait > 0:
-                time.sleep(wait)
-            self._last_request = time.monotonic()
-            try:
-                resp = self._client.get(path, params=params)
-            except httpx.HTTPError as e:
-                err: str = f"{type(e).__name__}: {e}"
-            else:
-                if resp.status_code == 404 and allow_404:
-                    return None
-                if resp.status_code == 200:
-                    return resp.json()
-                err = f"HTTP {resp.status_code}"
-                if resp.status_code < 500 and resp.status_code != 429:
-                    break
-            log.warning("GET %s failed (%s), attempt %d", path, err, attempt)
-            time.sleep(self._http.request_delay_s * 2**attempt)
-        raise CollectorError(f"GET {path} failed: {err}")
+        """GET JSON; None on 404 if allowed. Other non-200 statuses raise CollectorError."""
+        resp = self._client.request("GET", path, params=params)
+        if resp.status_code == 404 and allow_404:
+            return None
+        if resp.status_code != 200:
+            raise CollectorError(f"GET {path} failed: HTTP {resp.status_code}")
+        return resp.json()
 
 
 def build_search_params(profile: SearchProfile, make_model: str) -> dict[str, Any]:

@@ -14,7 +14,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from auto_hunter import report
-from auto_hunter.collectors import SautoCollector
+from auto_hunter.collectors import build_collectors
 from auto_hunter.config import load_config
 from auto_hunter.db import Database
 from auto_hunter.notify import send_alerts
@@ -29,6 +29,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p_collect = sub.add_parser("collect", help="Fetch listings and record changes")
     p_collect.add_argument("--profile", action="append", help="Only run these profiles")
+    p_collect.add_argument("--source", action="append",
+                           help="Only these sources (sauto, skodaplus, bazos)")
     p_collect.add_argument("--no-alerts", action="store_true")
 
     p_short = sub.add_parser("shortlist", help="Active listings, most promising first")
@@ -64,17 +66,23 @@ def main(argv: list[str] | None = None) -> int:
                 profiles = [p for p in profiles if p.name in args.profile]
                 if not profiles:
                     parser.error(f"No matching profiles: {args.profile}")
-            collector = SautoCollector(config.settings.http, config.settings.collection)
-            try:
-                summary = collect(db, collector, config, profiles)
-            finally:
-                collector.close()
-            logging.info("Run done: seen=%d new=%d changed=%d removed=%d errors=%d",
-                         summary.seen, summary.new, summary.changed, summary.removed,
-                         len(summary.errors))
+            collectors = build_collectors(config, args.source)
+            if not collectors:
+                parser.error("No enabled sources match")
+            alerts, total_failure = [], True
+            for collector in collectors:
+                try:
+                    summary = collect(db, collector, config, profiles)
+                finally:
+                    collector.close()
+                logging.info("%s done: seen=%d new=%d changed=%d removed=%d errors=%d",
+                             collector.source, summary.seen, summary.new, summary.changed,
+                             summary.removed, len(summary.errors))
+                alerts.extend(summary.alerts)
+                total_failure &= bool(summary.errors) and not summary.seen
             if not args.no_alerts:
-                send_alerts(summary.alerts)
-            return 1 if summary.errors and not summary.seen else 0
+                send_alerts(alerts)
+            return 1 if total_failure else 0
         if args.command == "shortlist":
             print(report.shortlist_report(db, config, args.limit, args.profile))
         elif args.command == "report":

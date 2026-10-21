@@ -1,6 +1,7 @@
 # auto-hunter documentation
 
-auto-hunter watches used-car listings on Sauto.cz for the cars described in `config/`,
+auto-hunter watches used-car listings on Sauto.cz, Škoda Plus and Bazoš for the cars
+described in `config/`,
 keeps every listing's price history, labels each car (generation, engine, risks,
 confidence) and alerts you about new listings and price drops.
 
@@ -17,15 +18,18 @@ Setup, commands and scheduling are in the [main README](../README.md).
 ```
 config/*.yaml ──► config.py ──► Config (settings, requirements, catalog, evaluation, profiles)
                                    │
-cli.py collect ──► pipeline.collect()
+cli.py collect ──► for each enabled source in sources.yaml: pipeline.collect()
                      │
-                     ├─ collectors/sauto.py   search each profile's models (Sauto JSON API)
+                     ├─ collectors/<source>   search each profile's models
+                     │    sauto.py      JSON API          skodaplus.py  GraphQL API
+                     │    bazos.py      HTML + textspecs.py (specs parsed from free text)
                      ├─ classify.py           which generation/engine could this be?
                      ├─ filters.py            does it fit the profile? (cheap, local)
-                     ├─ collectors/sauto.py   fetch details for new survivors, re-check
+                     ├─ collectors/<source>   fetch details for new survivors, re-check
                      ├─ db.py                 store state + history snapshot + profile links
                      ├─ evaluate.py           price tier, flags, confidence → assessment
-                     └─ notify.py             Telegram / console alerts
+                     └─ removal / recheck     full scan: vanished → check; Bazoš: stale → check
+                   then notify.py             Telegram / console alerts from all sources
 cli.py shortlist|report|market|history ──► report.py ──► db.py (read only)
 ```
 
@@ -48,6 +52,9 @@ These come from the project brief and explain most decisions in the code.
   in `config/catalog.yaml`, so research results don't require code changes.
 - **Advertised ≠ sold.** Prices are asking prices; a removed listing may have been
   sold, withdrawn or relisted.
+- **Respect the sources.** Only official/public endpoints or pages robots.txt allows,
+  paced requests, an honest User-Agent. Where a site disallows search (Bazoš), we accept
+  less coverage rather than work around it.
 
 ## Roadmap position
 

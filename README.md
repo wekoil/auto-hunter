@@ -1,8 +1,15 @@
 # auto-hunter
 
 Personal used-car monitor for the Czech market. It regularly searches
-[sauto.cz](https://www.sauto.cz), keeps every listing's price history in SQLite,
+[sauto.cz](https://www.sauto.cz), [skodaplus.cz](https://www.skodaplus.cz) and
+[auto.bazos.cz](https://auto.bazos.cz), keeps every listing's price history in SQLite,
 and alerts you (Telegram or console) about new listings and price drops.
+
+| Source | Access | Data | Coverage |
+|---|---|---|---|
+| Sauto | public JSON API | structured | full scan each run |
+| Škoda Plus | public GraphQL API (Czech stock only) | structured, rich (VIN, accident flag) | full scan each run |
+| Bazoš | category pages (search URLs are disallowed by robots.txt) | free text, parsed | incremental: new and bumped listings |
 
 This is the MVP (phase 1): data collection and history, no AI yet. Later phases
 add AI listing analysis, market valuation and ranking.
@@ -28,9 +35,11 @@ The config is split into three layers plus a knowledge base:
 | [evaluation.yaml](config/evaluation.yaml) | Evaluation rules | Price tiers, preferred mileage, confidence thresholds |
 | [catalog.yaml](config/catalog.yaml) | Knowledge base | Generations (years, title hints, engines) and engines (specs, reliability status, notes) |
 
-[settings.yaml](config/settings.yaml) holds request pacing, limits and the database path.
+[sources.yaml](config/sources.yaml) enables marketplaces and maps model names onto
+each one; [settings.yaml](config/settings.yaml) holds request pacing, limits and the
+database path.
 
-Sauto can't filter by generation or engine family, so each listing is classified
+No marketplace can filter by generation or engine family, so each listing is classified
 locally: the catalog lists which (generation, engine) pairs exist for a model, and the
 listing's year, title hints, displacement, power and turbo keywords eliminate the ones
 that don't fit. If one pair remains, the car is identified; if several do, it is
@@ -44,8 +53,8 @@ level. After editing the catalog or evaluation rules, run `auto-hunter reassess`
 ## Usage
 
 ```bash
-uv run auto-hunter collect              # fetch, store changes, send alerts
-uv run auto-hunter collect --profile A-octavia3-1.6mpi
+uv run auto-hunter collect              # fetch from all sources, store changes, alert
+uv run auto-hunter collect --source bazos --profile A-octavia3-1.6mpi
 uv run auto-hunter shortlist            # active listings, most promising first
 uv run auto-hunter report --days 7      # new / changed / removed listings
 uv run auto-hunter market               # asking-price spread per generation and engine
@@ -53,14 +62,17 @@ uv run auto-hunter history 211125480    # price history and assessment of one li
 uv run auto-hunter reassess             # re-label stored listings after config edits
 ```
 
-The first `collect` for a profile builds the baseline and sends no "new listing"
-alerts; later runs alert on genuinely new listings and on price drops of at least
-`alerts.min_price_drop_pct`.
+The first `collect` for a profile on each source builds the baseline and sends no
+"new listing" alerts; later runs alert on genuinely new listings and on price drops of
+at least `alerts.min_price_drop_pct`. The same car on two sites (same VIN) is flagged
+with the other listing's price.
 
 ## How it works
 
-1. **Search** – each profile's make/model, price, mileage, fuel, gearbox and body
-   filters are sent to Sauto's JSON API (`/api/v1/items/search`, allowed by robots.txt).
+1. **Search** – each source is collected in turn. Sauto and Škoda Plus get the profile's
+   make/model, price, mileage, fuel, gearbox and body filters server-side. Bazoš brand
+   categories are read newest-first until the previous crawl's position, and specs
+   are parsed from the text.
 2. **Local filters and classification** – year range, title keywords (e.g. "havarovaný"),
    generation and engine are checked locally. Identical queries from several profiles
    are fetched once.
@@ -71,14 +83,15 @@ alerts; later runs alert on genuinely new listings and on price drops of at leas
 4. **History** – `listings` holds each listing's current state and the original source
    payload (`raw_json`); `listing_snapshots` gets a row whenever price, mileage or
    status changes; `listing_assessments` holds the derived labels.
-5. **Removals** – after a complete, error-free run, tracked listings that no longer
-   appear are checked individually: gone → `removed`; still online but outside the
-   filters → `unmatched`. A removed listing is not necessarily sold: it may have been
-   withdrawn or relisted.
+5. **Removals** – full-scan sources: after a complete, error-free run, tracked listings
+   that no longer appear are checked individually: gone → `removed`; still online but
+   outside the filters → `unmatched`. Bazoš: listings not seen for
+   `recheck_after_days` are re-fetched. A removed listing is not necessarily sold: it
+   may have been withdrawn or relisted.
 
-The collector is deliberately slow (1.5 s between requests by default) and identifies
-itself in the User-Agent. Keep it that way, and check Sauto's terms of use before
-increasing the frequency.
+Collectors are deliberately slow (1.5 s between requests by default), identify
+themselves in the User-Agent and respect each site's robots.txt. Keep it that way,
+and check each site's terms of use before increasing the frequency.
 
 ## Scheduling (Ubuntu)
 

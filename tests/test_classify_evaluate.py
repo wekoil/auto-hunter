@@ -90,7 +90,7 @@ def test_profile_resolution():
     assert a.models == ["skoda:octavia"]
     assert (a.year_min, a.year_max, a.price_max, a.fuel, a.body) == (
         2013, 2020, 200000, ["benzin"], ["kombi"])
-    assert "havarovan" in a.exclude_keywords
+    assert "havarovan" in a.exclude_keywords and a.price_min == 20000
     b = PROFILES["B-golf-variant-1.6mpi"]
     assert b.models == ["volkswagen:golf", "volkswagen:golf-variant"]
 
@@ -101,7 +101,7 @@ def codes(a):
 
 def test_assess_preferred_engine_full_details():
     l = car("skoda:octavia", 2016, "Škoda Octavia, 1.6 MPI", power_kw=81, mileage_km=120_000,
-            service_book=True, vin="TMB123", has_details=True, gearbox="manualni")
+            service_book=True, vin="TMBJC7NE0H0062499", has_details=True, gearbox="manualni")
     a = assess(l, classify(l, CATALOG), CATALOG, CONFIG.evaluation)
     assert (a.generation, a.engine, a.engine_status, a.price_tier, a.confidence) == (
         "octavia-3", "ea211-1.6-mpi", "preferred", "target", "high")

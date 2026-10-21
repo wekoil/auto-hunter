@@ -5,7 +5,8 @@ Tables:
 - listing_snapshots:   append-only; one row per observed change (price/mileage/status)
 - listing_profiles:    which profiles a listing has matched, and when
 - listing_assessments: derived labels (generation, engine, flags), recomputable any time
-- collection_runs:     one row per `collect` run, for monitoring reliability
+- collection_runs:     one row per source per `collect` run, for monitoring reliability
+- source_state:        collector bookkeeping between runs (e.g. Bazoš crawl position)
 
 Timestamps are UTC ISO-8601 strings, so they sort and compare correctly as text.
 """
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS listings (
     description        TEXT,
     service_book       INTEGER,
     first_owner        INTEGER,
+    damaged            INTEGER,
     image_urls         TEXT NOT NULL DEFAULT '[]',
     source_created_at  TEXT,
     -- active: in search results; unmatched: still online but outside all profiles;
@@ -61,6 +63,8 @@ CREATE TABLE IF NOT EXISTS listings (
     raw_json           TEXT NOT NULL,
     UNIQUE (source, source_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_listings_vin ON listings(vin);
 
 -- One row per observed change, never updated: this is the price history.
 CREATE TABLE IF NOT EXISTS listing_snapshots (
@@ -94,8 +98,15 @@ CREATE TABLE IF NOT EXISTS listing_assessments (
     assessed_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS source_state (
+    source     TEXT PRIMARY KEY,
+    state      TEXT NOT NULL,  -- JSON, owned by the collector
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS collection_runs (
     id          INTEGER PRIMARY KEY,
+    source      TEXT,
     started_at  TEXT NOT NULL,
     finished_at TEXT,
     status      TEXT NOT NULL DEFAULT 'running',  -- running | ok | partial | failed
@@ -111,18 +122,25 @@ _LISTING_FIELDS = [
     "url", "title", "price_czk", "make", "model", "model_key", "variant", "year", "manufacturing_date",
     "mileage_km", "fuel", "gearbox", "power_kw", "engine_cc", "body", "vin", "seller_type",
     "seller_name", "region", "district", "municipality", "description", "service_book",
-    "first_owner", "source_created_at",
+    "first_owner", "damaged", "source_created_at",
 ]
 # Fields only present in detail responses; a later search result must not blank them.
 DETAIL_ONLY_FIELDS = {
     "power_kw", "engine_cc", "body", "vin", "description", "service_book", "first_owner",
+    "damaged",
 }
+# Columns added after the first release: (table, column, type) for _migrate.
+_ADDED_COLUMNS = [
+    ("listings", "model_key", "TEXT"),
+    ("listings", "damaged", "INTEGER"),
+    ("collection_runs", "source", "TEXT"),
+]
 
 
 def row_to_listing(row: sqlite3.Row) -> Listing:
     """Rebuild a Listing from stored state (for re-assessment without refetching)."""
     values = {f: row[f] for f in _LISTING_FIELDS}
-    for f in ("service_book", "first_owner"):
+    for f in ("service_book", "first_owner", "damaged"):
         if values[f] is not None:
             values[f] = bool(values[f])
     return Listing(
@@ -159,14 +177,19 @@ class Database:
 
     def _migrate(self) -> None:
         """Add columns introduced after a database was created."""
-        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(listings)")}
-        if "model_key" not in cols:
-            self.conn.execute("ALTER TABLE listings ADD COLUMN model_key TEXT")
-            self.conn.execute(
-                "UPDATE listings SET model_key = json_extract(raw_json, '$.manufacturer_cb.seo_name')"
-                " || ':' || json_extract(raw_json, '$.model_cb.seo_name') WHERE source = 'sauto'"
-            )
-            self.conn.commit()
+        for table, column, col_type in _ADDED_COLUMNS:
+            cols = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+            if column in cols:
+                continue
+            self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+            if (table, column) == ("listings", "model_key"):
+                self.conn.execute(
+                    "UPDATE listings SET model_key = json_extract(raw_json, '$.manufacturer_cb.seo_name')"
+                    " || ':' || json_extract(raw_json, '$.model_cb.seo_name') WHERE source = 'sauto'"
+                )
+            if (table, column) == ("collection_runs", "source"):
+                self.conn.execute("UPDATE collection_runs SET source = 'sauto'")
+        self.conn.commit()
 
     def close(self) -> None:
         self.conn.close()
@@ -265,15 +288,44 @@ class Database:
     def all_listings(self) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM listings").fetchall()
 
-    def known_profiles(self) -> set[str]:
-        """Profiles that have matched at least one listing in an earlier run."""
-        return {r[0] for r in self.conn.execute("SELECT DISTINCT profile FROM listing_profiles")}
+    def known_profiles(self, source: str) -> set[str]:
+        """Profiles that have matched at least one listing from this source before."""
+        return {r[0] for r in self.conn.execute(
+            """SELECT DISTINCT lp.profile FROM listing_profiles lp
+               JOIN listings l ON l.id = lp.listing_id WHERE l.source = ?""", (source,))}
 
-    def active_listings(self, source: str) -> list[sqlite3.Row]:
-        """(id, source_id) of listings currently considered live and matching."""
+    def active_listings(self, source: str, seen_before: str | None = None) -> list[sqlite3.Row]:
+        """(id, source_id) of listings considered live and matching.
+
+        With seen_before, only those whose last_seen_at is older than that timestamp.
+        """
+        sql = "SELECT id, source_id FROM listings WHERE source = ? AND status = 'active'"
+        params: list = [source]
+        if seen_before is not None:
+            sql += " AND last_seen_at < ? ORDER BY last_seen_at"
+            params.append(seen_before)
+        return self.conn.execute(sql, params).fetchall()
+
+    def same_vehicle(self, listing_id: int, vin: str) -> list[sqlite3.Row]:
+        """Other active listings with the same VIN, e.g. the same car on another site."""
         return self.conn.execute(
-            "SELECT id, source_id FROM listings WHERE source = ? AND status = 'active'", (source,)
+            """SELECT source, price_czk, url FROM listings
+               WHERE vin = ? AND id != ? AND status = 'active'""", (vin, listing_id),
         ).fetchall()
+
+    # --- collector state ------------------------------------------------------------
+
+    def load_state(self, source: str) -> dict:
+        row = self.conn.execute(
+            "SELECT state FROM source_state WHERE source = ?", (source,)
+        ).fetchone()
+        return json.loads(row["state"]) if row else {}
+
+    def save_state(self, source: str, state: dict, now: str) -> None:
+        self.conn.execute(
+            "INSERT OR REPLACE INTO source_state (source, state, updated_at) VALUES (?, ?, ?)",
+            (source, json.dumps(state), now),
+        )
 
     def _snapshot(self, listing_id: int, now: str, event: str, price: int | None,
                   mileage: int | None, status: str) -> None:
@@ -285,9 +337,11 @@ class Database:
 
     # --- runs ---------------------------------------------------------------------
 
-    def start_run(self, now: str) -> int:
+    def start_run(self, source: str, now: str) -> int:
         """Open a collection_runs row (committed at once, so crashed runs stay visible)."""
-        cur = self.conn.execute("INSERT INTO collection_runs (started_at) VALUES (?)", (now,))
+        cur = self.conn.execute(
+            "INSERT INTO collection_runs (source, started_at) VALUES (?, ?)", (source, now)
+        )
         self.conn.commit()
         return cur.lastrowid
 

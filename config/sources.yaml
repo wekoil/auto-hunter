@@ -1,0 +1,52 @@
+# Marketplaces to collect from, and how our model keys map onto each one.
+#
+# Model keys everywhere else (profiles.yaml, catalog.yaml) are Sauto's "make:model"
+# slugs, e.g. skoda:octavia. Other sources name models differently, so each maps
+# those keys to its own names here. A model key a source doesn't map is simply not
+# searched on that source.
+
+sauto:
+  enabled: true
+
+skodaplus:
+  # Škoda Plus: dealer network stock (all makes), public GraphQL API.
+  # Only Czech cars are requested (the API also serves Slovak cars priced in EUR).
+  enabled: true
+  # Model key -> make and model names exactly as skodaplus.cz shows them.
+  models:
+    skoda:octavia:           {make: Škoda, models: [Octavia, Octavia Combi]}
+    volkswagen:golf:         {make: Volkswagen, models: [Golf]}
+    volkswagen:golf-variant: {make: Volkswagen, models: [Golf Variant]}
+    ford:focus:              {make: Ford, models: [Focus]}
+    toyota:auris:            {make: Toyota, models: [Auris]}
+    toyota:avensis:          {make: Toyota, models: [Avensis]}
+    hyundai:i30:             {make: Hyundai, models: [i30, i30 CW]}
+    kia:cee-d:               {make: KIA, models: [Ceed]}
+    kia:cee-d-sw:            {make: KIA, models: [Ceed SW]}
+    opel:astra:              {make: Opel, models: [Astra, Astra Sport Tourer]}
+
+bazos:
+  # Bazoš: free-text classifieds. robots.txt disallows its search URLs, so we read
+  # brand categories newest-first and stop where the previous run left off.
+  enabled: true
+  # Pages (20 listings each) per category per run. Bumped/topped listings re-appear at
+  # the top constantly; ~15-20 pages cover 3 hours of the busy Škoda category.
+  max_pages_per_category: 40
+  # Bazoš doesn't show old listings again unless they're bumped, so tracked listings
+  # are re-checked individually once they haven't been seen for this many days.
+  recheck_after_days: 2
+  # Model key -> Bazoš category and a title regex (lowercased, no diacritics).
+  # Within a category the first matching entry wins, so list specific ones first.
+  # Estates are recognised from keywords (combi, kombi, variant, sw, touring, tourer,
+  # caravan...); listings that don't say what body they are can't be told apart from
+  # hatchbacks, so they are skipped when a profile requires a body type.
+  models:
+    skoda:octavia:           {category: skoda, title: '\boctavi'}
+    volkswagen:golf-variant: {category: volkswagen, title: '\bgolf\b.*\bvariant\b'}
+    volkswagen:golf:         {category: volkswagen, title: '\bgolf\b(?!\s*(plus|sportsvan|\+))'}
+    ford:focus:              {category: ford, title: '\bfocus\b(?!.*c-?max)'}
+    toyota:auris:            {category: toyota, title: '\bauris\b'}
+    toyota:avensis:          {category: toyota, title: '\bavensis\b'}
+    hyundai:i30:             {category: hyundai, title: '\bi30\b'}
+    kia:cee-d:               {category: kia, title: "\\bce{1,2}['´`-]?e?d\\b"}
+    opel:astra:              {category: opel, title: '\bastra\b'}

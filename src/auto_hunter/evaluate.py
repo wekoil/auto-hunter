@@ -6,11 +6,13 @@ market comparables and researched reliability data, which come in later phases.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
+from typing import Any
 
 from auto_hunter.classify import Classification
 from auto_hunter.config import Catalog, EvaluationRules
-from auto_hunter.models import Listing
+from auto_hunter.models import Listing, is_real_vin
 
 # Flags that mean "we don't know", as opposed to "we know something bad".
 UNCERTAINTY_CODES = {
@@ -46,7 +48,7 @@ class Assessment:
 
 
 def assess(listing: Listing, cls: Classification, catalog: Catalog,
-           rules: EvaluationRules) -> Assessment:
+           rules: EvaluationRules, duplicates: Sequence[Mapping[str, Any]] = ()) -> Assessment:
     """Apply the evaluation rules to a classified listing.
 
     Flags fall into two kinds: things we know are risky (caution engines, high mileage,
@@ -107,8 +109,14 @@ def assess(listing: Listing, cls: Classification, catalog: Catalog,
             flag("service_none", "caution", "Seller does not state a service book")
         elif listing.service_book is None:
             flag("service_unknown", "info", "Service history not stated")
-        if not listing.vin:
-            flag("vin_missing", "info", "VIN not published; ask the seller before travelling")
+        if not is_real_vin(listing.vin):
+            flag("vin_missing", "info", "Full VIN not published; ask the seller before travelling")
+
+    if listing.damaged:
+        flag("damage_reported", "caution", "Listing reports previous accident damage")
+    for d in duplicates:
+        price = f"{d['price_czk']:,} Kč".replace(",", " ") if d["price_czk"] else "no price"
+        flag("also_listed", "info", f"Same VIN also listed on {d['source']} for {price}: {d['url']}")
 
     uncertainties = sum(f.code in UNCERTAINTY_CODES for f in flags)
     confidence = (

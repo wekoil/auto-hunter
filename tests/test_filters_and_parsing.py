@@ -92,7 +92,7 @@ def _collector(items_by_model):
         return httpx.Response(200, json={"pagination": {"total": len(items)}, "results": items})
 
     c = SautoCollector(HttpSettings(request_delay_s=0), CollectionSettings())
-    c._client = httpx.Client(base_url="https://x", transport=httpx.MockTransport(handler))
+    c._client._client = httpx.Client(base_url="https://x", transport=httpx.MockTransport(handler))
     return c, calls
 
 

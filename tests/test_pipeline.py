@@ -154,3 +154,100 @@ def test_search_result_does_not_erase_details(db):
     collect(db, c, cfg())
     row = db.get_listing("fake", "1")
     assert (row["vin"], row["description"], row["price_czk"]) == ("TMBXXX", "Servisní knížka", 190_000)
+
+
+# --- incremental sources (Bazoš-style) ---------------------------------------------------
+
+class IncrementalCollector(FakeCollector):
+    source = "inc"
+    full_scan = False
+    summary_is_authoritative = False
+    recheck_after_days = 2
+
+
+def inc_listing(source_id, price=200_000, **kw):
+    return dataclasses.replace(make_listing(source_id, price, **kw), source="inc")
+
+
+def age_listing(db, source, source_id, days=3):
+    db.conn.execute(
+        "UPDATE listings SET last_seen_at = datetime('now', ?) WHERE source = ? AND source_id = ?",
+        (f"-{days} days", source, source_id))
+    db.commit()
+
+
+def test_incremental_absence_is_not_removal(db):
+    c = IncrementalCollector()
+    c.search_results = [inc_listing("1")]
+    collect(db, c, cfg())
+    c.search_results = []
+    c.fetched.clear()
+    s = collect(db, c, cfg())
+    assert s.removed == 0 and c.fetched == []        # recently seen: no recheck
+    assert db.get_listing("inc", "1")["status"] == "active"
+
+
+def test_incremental_recheck_detects_removal_and_price_drop(db):
+    c = IncrementalCollector()
+    c.search_results = [inc_listing("1"), inc_listing("2", 200_000)]
+    collect(db, c, cfg())
+    c.search_results = []
+    age_listing(db, "inc", "1")
+    age_listing(db, "inc", "2")
+    c.details = {"1": None, "2": inc_listing("2", 180_000)}
+    s = collect(db, c, cfg())
+    assert s.removed == 1
+    assert db.get_listing("inc", "1")["status"] == "removed"
+    assert db.get_listing("inc", "2")["status"] == "active"
+    assert [(a.kind, a.listing.source_id) for a in s.alerts] == [("price_drop", "2")]
+
+
+def test_non_authoritative_summary_keeps_detail_specs(db):
+    c = IncrementalCollector()
+    c.search_results = [inc_listing("1", 200_000)]
+    c.details = {"1": inc_listing("1", 200_000, mileage_km=150_000, vin="TMBJC7NE0H0062499")}
+    collect(db, c, cfg())
+    # Bumped again; the snippet lacks mileage and VIN and has a new price.
+    c.search_results = [inc_listing("1", 190_000, mileage_km=None)]
+    collect(db, c, cfg())
+    row = db.get_listing("inc", "1")
+    assert (row["price_czk"], row["mileage_km"], row["vin"]) == (190_000, 150_000, "TMBJC7NE0H0062499")
+    assert [e for e, _ in snapshots(db, "1")] == ["new", "changed"]
+
+
+def test_baseline_is_per_source(db):
+    c = FakeCollector()
+    c.search_results = [make_listing("1")]
+    collect(db, c, cfg())
+    inc = IncrementalCollector()
+    inc.search_results = [inc_listing("9")]
+    assert collect(db, inc, cfg()).alerts == []      # first run on this source
+
+
+def test_same_vin_on_two_sources_is_flagged(db):
+    vin = "TMBJC7NE0H0062499"
+    c = FakeCollector()
+    c.search_results = [make_listing("1", 200_000, vin=vin)]
+    c.details = {"1": make_listing("1", 200_000, vin=vin)}
+    collect(db, c, cfg())
+    inc = IncrementalCollector()
+    inc.search_results = [inc_listing("9", 190_000, vin=vin)]
+    inc.details = {"9": inc_listing("9", 190_000, vin=vin)}
+    collect(db, inc, cfg())
+    data = db.conn.execute(
+        """SELECT a.data FROM listing_assessments a JOIN listings l ON l.id = a.listing_id
+           WHERE l.source = 'inc'""").fetchone()["data"]
+    assert "Same VIN also listed on fake for 200 000 Kč" in data
+
+
+def test_collector_state_persists_between_runs(db):
+    class Counting(IncrementalCollector):
+        def search(self, profile):
+            self.state["runs"] = self.state.get("runs", 0) + 1
+            return super().search(profile)
+
+    for _ in range(3):
+        c = Counting()                             # fresh instance each run, like the CLI
+        c.search_results = []
+        collect(db, c, cfg())
+    assert db.load_state("inc") == {"runs": 3}

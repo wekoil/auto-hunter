@@ -10,11 +10,14 @@ budget) fails at startup with a message naming the problem.
 | `profiles.yaml` | 2. Vehicle profiles | you add/drop a model or engine family to watch |
 | `evaluation.yaml` | 3. Evaluation rules | you change how cars are labelled |
 | `catalog.yaml` | Knowledge base | you learn something about a generation or engine |
+| `sources.yaml` | Marketplaces | you enable/disable a site or map a model onto it |
 | `settings.yaml` | Technical | you change pacing, limits, database location |
 
 Values such as fuel or body use **Sauto's SEO names**, the slugs in sauto.cz URLs:
 fuel `benzin`, `nafta`, `hybridni`, `lpg-benzin`; gearbox `manualni`, `automaticka`;
-body `kombi`, `hatchback`, `liftback`, `sedanlimuzina`, `suv`, `mpv`.
+body `kombi`, `hatchback`, `liftback`, `sedanlimuzina`, `suv`, `mpv`. Model keys are
+Sauto's too (`skoda:octavia`). Other sources translate to these names via
+`sources.yaml`, so profiles and the catalog never mention a specific site.
 
 ---
 
@@ -143,7 +146,11 @@ The notes are research starting points, not verified facts.
 URL (`sauto.cz/inzerce/osobni/<make>/<model>`); some models have two keys (e.g.
 `golf` and `golf-variant`), so check both. Add generations (and engines) to the
 catalog, then a profile referencing them. A wrong model key fails loudly: Sauto would
-otherwise silently return the whole make, and the collector checks for that.
+otherwise silently return the whole make, and the collector checks for that. To search
+the model on Škoda Plus and Bazoš too, add it under their `models:` in sources.yaml.
+
+**Turn a marketplace off.** `enabled: false` under it in sources.yaml, or run
+`collect --source sauto` to collect from one source once.
 
 **Watch a model without researching it.** Add its key to a profile's `models` (like
 F-alternatives). Every car is flagged "not in catalog yet".
@@ -151,6 +158,54 @@ F-alternatives). Every car is flagged "not in catalog yet".
 **Change the budget.** `price_max` in requirements.yaml, and the tiers in evaluation.yaml.
 
 **Allow only manual gearboxes for one profile.** Add `gearbox: [manualni]` to it.
+
+## sources.yaml: marketplaces
+
+Each top-level key is a source; `enabled: false` turns it off. If the file is missing,
+only Sauto runs. A model key a source doesn't map is simply not searched there.
+
+### sauto
+
+No options besides `enabled`. Sauto's model keys are the canonical ones.
+
+### skodaplus
+
+```yaml
+models:
+  skoda:octavia: {make: Škoda, models: [Octavia, Octavia Combi]}
+```
+
+Names as skodaplus.cz shows them (matched ignoring case and diacritics). They are
+resolved to the API's internal ids at the start of each run; a name that doesn't
+exist logs a warning. Only Czech stock is requested, because Slovak stock is priced in EUR.
+Škoda Plus is mostly certified dealer stock, often above this budget, so expect
+few matches but very complete data (VIN, accident flag, service book).
+
+### bazos
+
+| Key | Default | Meaning |
+|---|---|---|
+| `max_pages_per_category` | 40 | Pages of 20 read per brand category per run. Also how deep the very first crawl goes. |
+| `recheck_after_days` | 2 | Tracked listings not seen for this long are re-fetched to catch price changes and removals. |
+| `models` | | `{category: <bazos brand slug>, title: <regex>}` per model key. |
+
+```yaml
+models:
+  volkswagen:golf-variant: {category: volkswagen, title: '\bgolf\b.*\bvariant\b'}
+  volkswagen:golf:         {category: volkswagen, title: '\bgolf\b(?!\s*(plus|sportsvan|\+))'}
+```
+
+- The category is the slug in the URL (`auto.bazos.cz/volkswagen/`).
+- The title regex runs on the lowercased, diacritics-free title. Within a category
+  the **first** matching entry wins, so put specific entries (Golf Variant) before
+  general ones (Golf).
+- Bazoš has no body field. A listing is accepted as an estate only if its text says
+  so (combi, kombi, variant, SW, touring, tourer, caravan...). One that doesn't say
+  is skipped when a profile requires a body type. Most estate ads do say it.
+- Listings with a Slovak postcode are skipped.
+
+How the incremental crawl works and what it can't see is described in
+[code-reference.md](code-reference.md#collectorsbazospy).
 
 ## settings.yaml
 
@@ -162,8 +217,8 @@ F-alternatives). Every car is flagged "not in catalog yet".
 | `http.timeout_s`, `http.max_retries` | 20, 3 | Retries cover network errors, 429 and 5xx, with exponential backoff. |
 | `collection.page_size` | 100 | Results per search page. |
 | `collection.max_results_per_query` | 2000 | Safety cap per model query; hitting it disables removal detection that run. |
-| `collection.max_detail_fetches` | 300 | Detail requests per run; the rest wait for the next run. |
-| `collection.max_removal_checks` | 200 | Requests per run confirming vanished listings. |
+| `collection.max_detail_fetches` | 300 | Detail requests per source per run; the rest wait for the next run. |
+| `collection.max_removal_checks` | 200 | Requests per source per run confirming vanished (or, for Bazoš, stale) listings. |
 | `alerts.min_price_drop_pct` | 3 | Smallest price drop that triggers an alert. |
 
 Telegram credentials go in `.env` (see `.env.example`), never in config files.
