@@ -66,6 +66,9 @@ class _Run:
         self.db, self.collector, self.config = db, collector, config
         self.profiles = profiles
         self.by_name = {p.name: p for p in profiles}
+        # Profiles whose listings this run may remove or unmatch; None = all of them.
+        self.scope = (None if set(self.by_name) == {p.name for p in config.profiles}
+                      else list(self.by_name))
         self.now = utcnow()
         self.summary = RunSummary(source=collector.source)
         self.detail_budget = config.settings.collection.max_detail_fetches
@@ -110,6 +113,9 @@ class _Run:
 
     def mark_unmatched(self, listing: Listing, existing) -> None:
         """Remember a non-matching listing so its details aren't paid for again."""
+        if (existing is not None and self.scope is not None
+                and self.db.listing_profiles(existing["id"]) - set(self.scope)):
+            return  # still claimed by a profile this run didn't check
         if existing is None or existing["status"] == "active":
             res = self.db.upsert_listing(listing, self.now)
             self.db.set_status(res.listing_id, "unmatched", self.now)
@@ -198,7 +204,7 @@ def collect(db: Database, collector: Collector, config: Config,
 def _check_vanished(run: _Run, seen_ids: set[str]) -> int:
     """Full-scan source: tracked listings no search returned are gone or out of scope."""
     db, cap = run.db, run.config.settings.collection.max_removal_checks
-    vanished = [r for r in db.active_listings(run.collector.source)
+    vanished = [r for r in db.active_listings(run.collector.source, profiles=run.scope)
                 if r["source_id"] not in seen_ids]
     removed = 0
     for row in vanished[:cap]:
@@ -231,7 +237,8 @@ def _recheck_stale(run: _Run, seen_ids: set[str]) -> int:
     db, cap = run.db, run.config.settings.collection.max_removal_checks
     cutoff = (datetime.now(timezone.utc) - timedelta(days=run.collector.recheck_after_days)
               ).isoformat(timespec="seconds")
-    stale = [r for r in db.active_listings(run.collector.source, seen_before=cutoff)
+    stale = [r for r in db.active_listings(run.collector.source, seen_before=cutoff,
+                                           profiles=run.scope)
              if r["source_id"] not in seen_ids]
     removed = 0
     all_profiles = list(run.by_name)

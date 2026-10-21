@@ -283,6 +283,11 @@ class Database:
             (listing_id, profile, now, now),
         )
 
+    def listing_profiles(self, listing_id: int) -> set[str]:
+        """Profiles the listing has matched."""
+        return {r[0] for r in self.conn.execute(
+            "SELECT profile FROM listing_profiles WHERE listing_id = ?", (listing_id,))}
+
     def save_assessment(self, listing_id: int, assessment: Assessment, now: str) -> None:
         """Replace the listing's assessment. Only the latest one is kept."""
         self.conn.execute(
@@ -302,13 +307,20 @@ class Database:
             """SELECT DISTINCT lp.profile FROM listing_profiles lp
                JOIN listings l ON l.id = lp.listing_id WHERE l.source = ?""", (source,))}
 
-    def active_listings(self, source: str, seen_before: str | None = None) -> list[sqlite3.Row]:
+    def active_listings(self, source: str, seen_before: str | None = None,
+                        profiles: list[str] | None = None) -> list[sqlite3.Row]:
         """(id, source_id) of listings considered live and matching.
 
         With seen_before, only those whose last_seen_at is older than that timestamp.
+        With profiles, only those matched by no profile outside that list, so a run
+        limited to some profiles leaves the other profiles' listings alone.
         """
         sql = "SELECT id, source_id FROM listings WHERE source = ? AND status = 'active'"
         params: list = [source]
+        if profiles is not None:
+            sql += (" AND NOT EXISTS (SELECT 1 FROM listing_profiles p WHERE p.listing_id ="
+                    f" listings.id AND p.profile NOT IN ({','.join('?' * len(profiles))}))")
+            params.extend(profiles)
         if seen_before is not None:
             sql += " AND last_seen_at < ? ORDER BY last_seen_at"
             params.append(seen_before)

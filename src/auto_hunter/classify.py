@@ -95,7 +95,7 @@ class Classification:
 
 
 def classify(listing: Listing, catalog: Catalog) -> Classification:
-    """Narrow down generation and engine: year, then title hints, then engine specs."""
+    """Narrow down generation and engine: year, title hints, engine specs, engine hints."""
     gens: list[Generation] = catalog.generations_for(listing.model_key)
     if not gens:
         return Classification(engine_known=engine_hints(listing).known)
@@ -111,6 +111,12 @@ def classify(listing: Listing, catalog: Catalog) -> Classification:
     pairs = [
         (g.id, e) for g in gens for e in g.engines if engine_matches(catalog.engines[e], hints)
     ]
+    hinted_pairs = [
+        (g, e) for g, e in pairs
+        if any(re.search(h, text) for h in catalog.engines[e].title_hints)
+    ]
+    if hinted_pairs:
+        pairs = hinted_pairs
     if pairs:
         return Classification(
             generations=list(dict.fromkeys(g for g, _ in pairs)),

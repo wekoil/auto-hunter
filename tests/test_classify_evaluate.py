@@ -43,6 +43,16 @@ def car(model_key: str, year: int, title: str, **kw) -> Listing:
     (car("ford:focus", 2014, "Ford Focus, 1.6 Ti-VCT Trend"), ["focus-3"], ["ford-1.6-tivct"]),
     (car("ford:focus", 2014, "Ford Focus, 1.6"), ["focus-3"],
      ["ford-1.6-tivct", "ford-1.6-ecoboost"]),
+    # 1.6 GDI and 1.6 MPI share 88 kW; the title keyword decides, power alone can't.
+    (car("hyundai:i30", 2013, "Hyundai i30, 1.6 GDI, Serv.kniha", power_kw=99),
+     ["i30-2"], ["hyundai-kia-1.6-gdi"]),
+    (car("hyundai:i30", 2016, "Hyundai i30, 1.6 GDI 88kW"), ["i30-2"], ["hyundai-kia-1.6-gdi"]),
+    (car("hyundai:i30", 2012, "Hyundai i30, Trikolor 1.6 MPI 88 kW", power_kw=88),
+     ["i30-1", "i30-2"], ["hyundai-kia-1.6-mpi"]),
+    (car("kia:cee-d", 2014, "Kia Cee´d, 1.6 88kW"), ["ceed-2"],
+     ["hyundai-kia-1.6-mpi", "hyundai-kia-1.6-gdi"]),
+    # "T-GDI" is the turbo, not the 1.6 GDI.
+    (car("kia:cee-d-sw", 2016, "Kia Cee´d SW 1.0 T-GDI"), ["ceed-2"], ["hyundai-kia-1.0-tgdi"]),
 ])
 def test_classify(listing, generations, engines):
     cls = classify(listing, CATALOG)
@@ -55,7 +65,7 @@ def test_octavia2_title_hint_not_confused_by_displacement():
 
 
 def test_uncataloged_model():
-    cls = classify(car("hyundai:i30", 2015, "Hyundai i30 1.4 CVVT"), CATALOG)
+    cls = classify(car("toyota:auris", 2015, "Toyota Auris 1.6 Valvematic"), CATALOG)
     assert not cls.cataloged_model and cls.engine_known
 
 
@@ -77,6 +87,18 @@ def test_profiles_route_by_engine():
     # Engine outside the catalog (e.g. RS) is dropped from engine-restricted profiles.
     rs = car("skoda:octavia", 2016, "Škoda Octavia RS 2.0 TSI", power_kw=169)
     assert reject(rs, "D-octavia3-other-petrol") is not None
+
+
+def test_gdi_profile():
+    gdi = car("kia:cee-d", 2014, "Kia Cee´d, 1.6 GDI", engine_cc=1591, power_kw=99)
+    assert reject(gdi, "G-i30-ceed-1.6gdi") is None
+    assert reject(car("kia:cee-d", 2014, "Kia Cee´d, 1.4 CVVT", power_kw=73),
+                  "G-i30-ceed-1.6gdi") is not None
+    # 88 kW without a keyword could be either 1.6, so it stays and gets flagged.
+    assert reject(car("hyundai:i30", 2015, "Hyundai i30, 1.6 88kW"), "G-i30-ceed-1.6gdi") is None
+    assert reject(car("hyundai:i30", 2015, "Hyundai i30, 1.6 MPI 88kW"),
+                  "G-i30-ceed-1.6gdi") is not None
+    assert reject(car("hyundai:i30", 2019, "Hyundai i30, 1.0 T-GDI"), "G-i30-ceed-1.6gdi") is not None
 
 
 def test_profiles_route_by_generation():

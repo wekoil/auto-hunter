@@ -84,6 +84,50 @@ generations:
     title_hints: ['focus\s*(iv|4|mk\s*4)\b(?![.,]\d)']
     engines: [ford-1.0-ecoboost, ford-1.5-ecoboost]
 
+  # Hyundai i30 and Kia cee'd share platforms and engines generation by generation.
+  i30-1:
+    label: Hyundai i30 CW (FD)
+    models: [hyundai:i30]
+    years: [2008, 2012]
+    title_hints: ['\bi30\s*(cw\s*)?(i|1|fd)\b(?![.,]\d)']
+    engines: [hyundai-kia-1.4-mpi, hyundai-kia-1.6-mpi, hyundai-kia-2.0-mpi]
+
+  i30-2:
+    label: Hyundai i30 Kombi (GD)
+    models: [hyundai:i30]
+    years: [2012, 2017]
+    title_hints: ['\bi30\s*(kombi\s*|combi\s*|wagon\s*)?(ii|2|gd)\b(?![.,]\d)']
+    engines: [hyundai-kia-1.4-mpi, hyundai-kia-1.6-mpi, hyundai-kia-1.6-gdi]
+
+  i30-3:
+    label: Hyundai i30 Kombi (PD)
+    models: [hyundai:i30]
+    years: [2017, null]
+    title_hints: ['\bi30\s*(kombi\s*|combi\s*|wagon\s*)?(iii|3|pd)\b(?![.,]\d)']
+    engines: [hyundai-kia-1.0-tgdi, hyundai-kia-1.4-mpi, hyundai-kia-1.4-tgdi,
+              hyundai-kia-1.5-dpi, hyundai-kia-1.5-tgdi]
+
+  ceed-1:
+    label: Kia cee'd SW (ED)
+    models: [kia:cee-d, kia:cee-d-sw]
+    years: [2007, 2012]
+    engines: [hyundai-kia-1.4-mpi, hyundai-kia-1.6-mpi, hyundai-kia-2.0-mpi]
+
+  ceed-2:
+    label: Kia cee'd SW (JD)
+    models: [kia:cee-d, kia:cee-d-sw]
+    years: [2012, 2018]
+    title_hints: ['\bjd\b']
+    engines: [hyundai-kia-1.0-tgdi, hyundai-kia-1.4-mpi, hyundai-kia-1.6-mpi,
+              hyundai-kia-1.6-gdi]
+
+  ceed-3:
+    label: Kia Ceed SW (CD)
+    models: [kia:cee-d, kia:cee-d-sw]
+    years: [2018, null]
+    engines: [hyundai-kia-1.0-tgdi, hyundai-kia-1.4-mpi, hyundai-kia-1.4-tgdi,
+              hyundai-kia-1.5-dpi, hyundai-kia-1.5-tgdi, hyundai-kia-1.6-tgdi]
+
 engines:
   # --- VW group -------------------------------------------------------------------
   ea211-1.6-mpi:
@@ -209,3 +253,73 @@ engines:
     turbo: true
     status: caution
     notes: Overheating-related problems and recalls reported. Check recall completion.
+
+  # --- Hyundai / Kia --------------------------------------------------------------
+  # 1.6 GDI and 1.6 MPI are both naturally aspirated and share 88 kW in some years,
+  # so the title's "GDI" / "MPI" / "CVVT" decides between them when present.
+  hyundai-kia-1.6-gdi:
+    label: 1.6 GDI (Gamma)
+    liters: 1.6
+    power_kw: [88, 99]
+    turbo: false
+    status: ok
+    title_hints: ['(?<![a-z-])gdi\b']
+    notes: Naturally aspirated direct injection with timing chain. Direct injection can build carbon on the intake valves; ask about oil consumption and chain noise on a cold start.
+
+  hyundai-kia-1.6-mpi:
+    label: 1.6 MPI/CVVT (Gamma)
+    liters: 1.6
+    power_kw: [85, 88, 90, 93, 95]
+    turbo: false
+    status: unvetted
+    title_hints: ['(?<![a-z])mpi\b', 'cvvt', '\b1[.,]6\s*i\b']
+
+  hyundai-kia-1.4-mpi:
+    label: 1.4 MPI/CVVT
+    liters: 1.4
+    power_kw: [66, 73, 74, 77, 80]
+    turbo: false
+    status: unvetted
+
+  hyundai-kia-2.0-mpi:
+    label: 2.0 CVVT
+    liters: 2.0
+    power_kw: [105, 110]
+    turbo: false
+    status: unvetted
+
+  hyundai-kia-1.5-dpi:
+    label: 1.5 DPI (Smartstream)
+    liters: 1.5
+    power_kw: [81]
+    turbo: false
+    status: unvetted
+
+  hyundai-kia-1.0-tgdi:
+    label: 1.0 T-GDI (Kappa)
+    liters: 1.0
+    power_kw: [74, 88]
+    turbo: true
+    status: unvetted
+
+  hyundai-kia-1.4-tgdi:
+    label: 1.4 T-GDI (Kappa)
+    liters: 1.4
+    power_kw: [103]
+    turbo: true
+    status: unvetted
+
+  hyundai-kia-1.5-tgdi:
+    label: 1.5 T-GDI (Smartstream)
+    liters: 1.5
+    power_kw: [103, 117, 118]
+    turbo: true
+    status: unvetted
+
+  hyundai-kia-1.6-tgdi:
+    label: 1.6 T-GDI (Gamma)
+    liters: 1.6
+    power_kw: [150]
+    turbo: true
+    status: unvetted
+    notes: Performance-oriented (GT); outside your priorities.

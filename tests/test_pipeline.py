@@ -121,6 +121,40 @@ def test_vanished_listing_removed_or_unmatched(db):
     assert snapshots(db, "1")[-1] == ("reactivated", 190_000)
 
 
+def test_profile_limited_run_leaves_other_profiles_alone(db):
+    other = dataclasses.replace(PROFILE, name="q")
+    config = Config(Settings(), Requirements(), Catalog(), EvaluationRules(), [PROFILE, other])
+    c = FakeCollector()
+    c.search_results = [make_listing("1")]
+    collect(db, c, config, [other])
+    c.search_results = [make_listing("2")]
+    collect(db, c, config, [PROFILE])
+
+    # "1" belongs to profile q only; a run of p must not check or unmatch it.
+    c.fetched.clear()
+    c.details = {"1": make_listing("1", 350_000)}
+    collect(db, c, config, [PROFILE])
+    assert "1" not in c.fetched
+    assert db.get_listing("fake", "1")["status"] == "active"
+
+    # A full run still does.
+    c.search_results = []
+    collect(db, c, config)
+    assert db.get_listing("fake", "1")["status"] == "unmatched"
+
+
+def test_profile_limited_run_keeps_listing_rejected_after_details(db):
+    sedans = dataclasses.replace(PROFILE, name="s", body=["sedan"])
+    config = Config(Settings(), Requirements(), Catalog(), EvaluationRules(), [PROFILE, sedans])
+    c = FakeCollector()
+    c.search_results = [make_listing("1")]
+    collect(db, c, config, [PROFILE])  # details say kombi
+    # The sedan search returns it too (no body in summaries), but the stored details
+    # rule it out; it must stay active for profile p.
+    collect(db, c, config, [sedans])
+    assert db.get_listing("fake", "1")["status"] == "active"
+
+
 def test_failed_search_skips_removal_detection(db):
     c = FakeCollector()
     c.search_results = [make_listing("1")]

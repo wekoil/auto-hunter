@@ -88,6 +88,9 @@ class Engine:
     power_kw: list[int]    # every output it was sold with; matched with ±3 kW tolerance
     turbo: bool            # compared with title keywords (TSI/EcoBoost vs MPI/Ti-VCT)
     status: str = "unvetted"
+    # Regexes on the folded title; among engines the specs allow, matching ones win
+    # (e.g. "gdi" vs "mpi" for two naturally aspirated 1.6s with the same power).
+    title_hints: list[str] = field(default_factory=list)
     notes: str = ""
     automatic_note: str = ""  # extra caution shown when the car is an automatic
 
@@ -203,6 +206,8 @@ def load_catalog(path: Path) -> Catalog:
     for e in engines.values():
         if e.status not in ENGINE_STATUSES:
             raise ValueError(f"Engine {e.id}: status must be one of {ENGINE_STATUSES}")
+        for h in e.title_hints:
+            re.compile(h)
     generations = {}
     for gid, g in (data.get("generations") or {}).items():
         year_from, year_to = g.pop("years")
