@@ -57,6 +57,21 @@ def _e(value) -> str:
     return escape("" if value is None else str(value))
 
 
+# Seznam's CDN (sauto) answers 401 to a bare image URL and serves it only through one of
+# a whitelist of `fl=` transforms; these are the ones sauto.cz itself uses.
+_SDN_TRANSFORMS = {
+    "thumb": "res,320,240,1|jpg,80,,1",
+    "full": "exf|crr,1.33333,2|res,1024,768,1|wrm,/watermark/sauto.png,10,10|jpg,80,,1",
+}
+
+
+def _img(url: str, size: str) -> str:
+    """Image URL the browser can load; `size` is "thumb" or "full"."""
+    if ".sdn.cz/" in url and "?" not in url:
+        return f"{url}?fl={_SDN_TRANSFORMS[size]}"
+    return url
+
+
 def _price(p: int | None) -> str:
     return f"{p:,} Kč".replace(",", " ") if p is not None else "?"
 
@@ -263,7 +278,8 @@ def _header(f: dict, sort: str, label: str) -> str:
 
 def _row(e: dict) -> str:
     a = e["a"]
-    thumb = (f'<img src="{_e(e["images"][0])}" alt="" loading="lazy" referrerpolicy="no-referrer">'
+    thumb = (f'<img src="{_e(_img(e["images"][0], "thumb"))}" alt="" loading="lazy" '
+             'referrerpolicy="no-referrer">'
              if e["images"] else '<div class="noimg">no photo</div>')
     price = _price(e["price_czk"])
     if e["drop_pct"] is not None:
@@ -396,7 +412,8 @@ def listing_page(db: Database, config: Config, listing_id: int) -> str | None:
     images = json.loads(l["image_urls"])
 
     gallery = "".join(
-        f'<a href="{_e(u)}" target="_blank" rel="noreferrer"><img src="{_e(u)}" alt="" '
+        f'<a href="{_e(_img(u, "full"))}" target="_blank" rel="noreferrer">'
+        f'<img src="{_e(_img(u, "full"))}" alt="" '
         f'loading="lazy" referrerpolicy="no-referrer"></a>' for u in images)
     hp = f" ({round(l['power_kw'] * 1.341)} hp)" if l["power_kw"] else ""
     place = ", ".join(v for v in (l["municipality"], l["district"], l["region"]) if v)
