@@ -39,20 +39,31 @@ _KM_LABELLED = re.compile(
     r"\s*:?\s*" + _KM_NUMBER
 )
 _KM_PLAIN = re.compile(_KM_NUMBER + r"\s*km\b")
-_KM_THOUSANDS = re.compile(r"\b(\d{2,3})\s*(?:tis\.?|tisic|tkm|xxx)\s*(?:km)?\b")
+_THOUSANDS = r"(\d{2,3})\s*(?:tis\.?|tisic|tkm|xxx)"
+_KM_THOUSANDS = re.compile(r"\b" + _THOUSANDS + r"\s*(?:km)?\b")
+_KM_LABELLED_THOUSANDS = re.compile(
+    r"(?:najeto|najezd|tachometr|stav tachometru|stav km|\bkm\s*:)\s*:?\s*(?:cca\s*)?" + _THOUSANDS
+)
+# "rozvody měněny při 120 000 km" is a service record, not the odometer.
+_NOT_ODOMETER = re.compile(r"\bpri\b|kolem|vymen|menen|rozvod|turbo|spojk|\bolej|kazdych|interval")
 
 _KW = re.compile(r"\b(\d{2,3})\s*kw\b")
 _LITERS = re.compile(r"(?<![\d.,])([0-3])[.,](\d)(?!\d)")
 _VIN = re.compile(r"\b([A-HJ-NPR-Z0-9]{17})\b")
 
 _FUEL_LABELLED = re.compile(r"palivo\s*:?\s*([a-z()-]+)")
+# Engine codes are often glued to the displacement ("1.6crdi", "1.4tsi"), so they only
+# need a non-letter before them, not a word boundary.
+_C = r"(?<![a-z])"
 _FUEL_WORDS = [
     ("lpg-benzin", r"\blpg\b"),
     ("cng-benzin", r"\bcng\b|g-tec"),
     ("hybridni", r"hybrid"),
     ("elektro", r"\belektro(?:mobil)?\b|\belektricky pohon\b"),
-    ("nafta", r"\bnafta\b|diesel|\btdi\b|\btdci\b|\bcrdi\b|\bcdti\b|\bhdi\b|\bdci\b|d-4d|\bjtd|multijet|\bcdi\b"),
-    ("benzin", r"benzin|\btsi\b|\btfsi\b|\bmpi\b|\bfsi\b|ti-?vct|ecoboost|vvt-?i|valvematic|\bgdi\b|\bt-gdi\b|\bcvvt\b"),
+    ("nafta", rf"\bnafta\b|diesel|{_C}tdi\b|{_C}tdci\b|{_C}crdi\b|{_C}cdti\b|{_C}hdi\b"
+              rf"|{_C}dci\b|d-4d|{_C}jtd|multijet|{_C}cdi\b"),
+    ("benzin", rf"benzin|{_C}tsi\b|{_C}tfsi\b|{_C}mpi\b|{_C}fsi\b|ti-?vct|ecoboost|vvt-?i"
+               rf"|valvematic|{_C}gdi\b|{_C}t-gdi\b|{_C}cvvt\b"),
 ]
 # "automatická/manuální klimatizace" (air-con) must not set the gearbox.
 _NOT_AIRCON = r"\b(?!\.?\s*klim)"
@@ -112,9 +123,12 @@ def extract_mileage(text: str) -> int | None:
         km = _km(m.group(1))
         if 1000 <= km <= 600_000:
             return km
+    for m in _KM_LABELLED_THOUSANDS.finditer(text):
+        return int(m.group(1)) * 1000
     for m in _KM_PLAIN.finditer(text):
         km = _km(m.group(1))
-        if 1000 <= km <= 600_000:
+        context = text[max(0, m.start() - 25):m.start()]
+        if 1000 <= km <= 600_000 and not _NOT_ODOMETER.search(context):
             return km
     for m in _KM_THOUSANDS.finditer(text):
         return int(m.group(1)) * 1000

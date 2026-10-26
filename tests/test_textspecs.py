@@ -36,6 +36,9 @@ def test_year(title, text, year):
     ("km: 120000", 120000),
     # A bare "km" followed by a year must not become the mileage.
     ("145000 km 2016", 145000),
+    # Labelled "xxx" mileage beats a service record mentioning another mileage.
+    ("Rozvody byly měněny přibližně při 120 000 km. Najeto: 203 xxx km.", 203000),
+    ("turbo měněno kolem 140 000 km", None),
     ("bez udání", None),
 ])
 def test_mileage(text, km):
@@ -46,6 +49,10 @@ def test_mileage(text, km):
     ("Palivo: Benzín", "benzin"),
     ("1.4 TSI 110 kW", "benzin"),
     ("2.0 TDI 110kW", "nafta"),
+    # Code glued to the displacement.
+    ("Kia Ceed 1.6CRDi 100kW", "nafta"),
+    ("Vw Golf 6 variant 1.6tdi 77kw", "nafta"),
+    ("Octavia 1.4tsi 110kw", "benzin"),
     ("1.6 MPI + LPG, benzín", "lpg-benzin"),
     ("ev. č. vozidla 1AB2345, 1.6 MPI", "benzin"),   # "ev." is not electric
     ("benzín i nafta k dispozici", None),
