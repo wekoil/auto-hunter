@@ -32,6 +32,7 @@ Inherited by every profile.
 | `price_max` | Overall budget in CZK. A profile may set a lower one, never higher. |
 | `mileage_max` | Hard mileage cap. Keep it above your *preferred* limit (in evaluation.yaml) so good higher-mileage cars are flagged, not hidden. |
 | `exclude_keywords` | Words that drop a listing when found in its title. Matching ignores case and diacritics and only matches at a word start, so `havarovan` matches "Havarovaný" but not "nehavarovaný". Descriptions are not searched (they often say "nehavarovaný"). |
+| `exclude_sellers` | Dealers you won't buy from (e.g. `aaa auto`). Matched as a case/diacritics-insensitive substring of the seller name; private sellers and Bazoš have none, so they're never affected. A profile may add its own. |
 
 ## profiles.yaml: vehicle profiles
 
@@ -49,7 +50,7 @@ several is stored once and listed with all its profiles.
 | `body` | Override the global body styles, e.g. `[kombi]` for models with no liftback. |
 | `price_max`, `price_min`, `mileage_max` | Override the global values (within budget). |
 | `gearbox` | Restrict gearbox, e.g. `[manualni]`. Omit for either. |
-| `exclude_keywords` | Added to the global list. |
+| `exclude_keywords`, `exclude_sellers` | Added to the global lists. |
 
 ### Current profiles
 

@@ -21,3 +21,6 @@ exclude_keywords: [
   "koupím", "vykoupím", "výkup", "poptávám",
   "bez registr", "prodáno",
 ]
+# Dealers you won't buy from. Matched as a case/diacritics-insensitive substring of the
+# seller name (only dealers have one; Bazoš never says).
+exclude_sellers: ["aaa auto", "auto esa"]

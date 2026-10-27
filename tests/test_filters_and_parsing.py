@@ -112,3 +112,11 @@ def test_sauto_shares_identical_queries_between_profiles():
     p2 = SearchProfile(name="b", models=["volkswagen:golf-sportsvan"], price_max=200000)
     assert len(c.search(p1).listings) == len(c.search(p2).listings) == 1
     assert calls == ["volkswagen:golf-sportsvan"]
+
+
+def test_excluded_sellers():
+    p = SearchProfile(name="p", models=["skoda:octavia"], exclude_sellers=["aaa auto", "auto esa"])
+    assert rejection_reason(_l(year=2016, seller_name="AAA AUTO"), p) == "seller 'AAA AUTO'"
+    assert rejection_reason(_l(year=2016, seller_name="Auto  ESA s.r.o."), p) is not None
+    assert rejection_reason(_l(year=2016, seller_name="Autosalon Klokočka"), p) is None
+    assert rejection_reason(_l(year=2016), p) is None

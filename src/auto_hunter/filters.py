@@ -49,6 +49,12 @@ def rejection_reason(listing: Listing, profile: SearchProfile,
         if re.search(r"\b" + re.escape(fold(kw)), headline):
             return f"keyword {kw!r}"
 
+    # Seller names vary in case and spacing ("AAA AUTO", "AAA Auto a.s."), so match folded.
+    seller = re.sub(r"\s+", " ", fold(listing.seller_name or ""))
+    for name in profile.exclude_sellers:
+        if fold(name) in seller:
+            return f"seller {listing.seller_name!r}"
+
     if cls is not None:
         if profile.generations and not set(cls.generations) & set(profile.generations):
             return "generation " + ("/".join(cls.generations) or "outside catalog years")

@@ -71,6 +71,7 @@ class Requirements:
     price_max: int | None = None
     mileage_max: int | None = None
     exclude_keywords: list[str] = field(default_factory=list)
+    exclude_sellers: list[str] = field(default_factory=list)
 
 
 # preferred/ok: no flag; caution: flagged with its notes; unvetted: flagged as not yet
@@ -164,6 +165,7 @@ class SearchProfile:
     gearbox: list[str] = field(default_factory=list)
     body: list[str] = field(default_factory=list)
     exclude_keywords: list[str] = field(default_factory=list)
+    exclude_sellers: list[str] = field(default_factory=list)
     generations: list[str] = field(default_factory=list)
     engines: list[str] = field(default_factory=list)
 
@@ -237,7 +239,7 @@ def resolve_profile(raw: dict[str, Any], req: Requirements, catalog: Catalog) ->
     - models: the generations' Sauto models plus any listed explicitly
     - year range: spans the generations unless the profile sets year_min/year_max
     - price/mileage caps: the profile's own, else the global ones (never above the budget)
-    - fuel/body: global; exclude_keywords: global plus the profile's own
+    - fuel/body: global; exclude_keywords/exclude_sellers: global plus the profile's own
     """
     raw = dict(raw)
     name = raw.pop("name")
@@ -279,6 +281,7 @@ def resolve_profile(raw: dict[str, Any], req: Requirements, catalog: Catalog) ->
         fuel=raw.pop("fuel", req.fuel),
         body=raw.pop("body", req.body),
         exclude_keywords=[*req.exclude_keywords, *raw.pop("exclude_keywords", [])],
+        exclude_sellers=[*req.exclude_sellers, *raw.pop("exclude_sellers", [])],
         generations=gen_ids,
         engines=engine_ids,
         **raw,  # gearbox
