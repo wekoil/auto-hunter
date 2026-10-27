@@ -64,6 +64,19 @@ def test_octavia2_title_hint_not_confused_by_displacement():
     assert cls.generations == ["octavia-3"]
 
 
+def test_vin_type_code_settles_changeover_year():
+    title = "Škoda Octavia, 1.2 TSI 77kW"
+    assert classify(car("skoda:octavia", 2013, title), CATALOG).generations == [
+        "octavia-2", "octavia-3"]
+    octavia3 = classify(car("skoda:octavia", 2013, title, vin="TMBJG7NE0D0000001"), CATALOG)
+    assert (octavia3.generation, octavia3.engine) == ("octavia-3", "ea211-1.2-tsi")
+    octavia2 = classify(car("skoda:octavia", 2013, title, vin="TMBHT61Z0D2000001"), CATALOG)
+    assert (octavia2.generation, octavia2.engine) == ("octavia-2", "ea111-1.2-tsi")
+    # An unknown code doesn't narrow anything.
+    assert classify(car("skoda:octavia", 2013, title, vin="XXXXXXXXXXXXXXXXX"),
+                    CATALOG).generations == ["octavia-2", "octavia-3"]
+
+
 def test_uncataloged_model():
     cls = classify(car("opel:astra", 2015, "Opel Astra Sports Tourer 1.4 Turbo"), CATALOG)
     assert not cls.cataloged_model and cls.engine_known

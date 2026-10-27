@@ -20,6 +20,13 @@ profiles:
     engines: [ea211-1.6-mpi]
     body: [kombi, liftback, hatchback, sedanlimuzina]
 
+  - name: A2-octavia-older-1.6mpi
+    priority: high
+    # Octavia II and Octavia I Tour with the 1.6 MPI 75 kW (EA113, as in the Golf V).
+    generations: [octavia-1, octavia-2]
+    engines: [ea113-1.6-mpi]
+    body: [kombi, liftback, hatchback, sedanlimuzina]
+
   - name: B-golf-variant-1.6mpi
     priority: high
     # In practice mostly Golf V/VI Variant (EA113); 1.6 MPI was rare in the Golf VII Variant.

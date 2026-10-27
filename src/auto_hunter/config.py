@@ -100,7 +100,8 @@ class Generation:
     """catalog.yaml generation of a model, e.g. Octavia III.
 
     Sauto has no generation field, so classify.py infers it from the listing's year,
-    title (title_hints regexes) and which engines this generation was sold with.
+    VIN type code, title (title_hints regexes) and which engines this generation was
+    sold with.
     """
 
     id: str
@@ -110,6 +111,8 @@ class Generation:
     year_to: int | None    # None = still in production
     title_hints: list[str] = field(default_factory=list)
     engines: list[str] = field(default_factory=list)
+    # VW-group type code, VIN characters 7-8 ("NE" = Octavia III); empty if not distinctive.
+    vin_codes: list[str] = field(default_factory=list)
 
     def covers_year(self, year: int) -> bool:
         return self.year_from <= year and (self.year_to is None or year <= self.year_to)

@@ -9,22 +9,36 @@
 #
 # Generations: years are inclusive manufacturing years of the ESTATE version; adjacent
 # generations overlap in changeover years on purpose. title_hints are regexes matched
-# against the lowercased, diacritics-free title. A listing's generation is resolved from
-# year, title hints and which engines that generation actually had.
+# against the lowercased, diacritics-free title. vin_codes are VW-group type codes (VIN
+# characters 7-8) and decide changeover years when a VIN is known; leave them out where
+# generations share a code (Golf V/VI are both 1K). A listing's generation is resolved
+# from year, VIN, title hints and which engines that generation actually had.
 
 generations:
+  # Only the Tour years (sold alongside the Octavia II); older cars are out of scope.
+  octavia-1:
+    label: Škoda Octavia I Tour (1U)
+    models: [skoda:octavia]
+    years: [2004, 2010]
+    title_hints: ['\btour\b', 'octavia,?\s*(i|1)\b(?![.,]\d)', '\b1u\b']
+    vin_codes: [1U]
+    engines: [ea113-1.6-mpi]
+
   octavia-2:
     label: Škoda Octavia II (1Z)
     models: [skoda:octavia]
     years: [2004, 2013]
     title_hints: ['octavia,?\s*(ii|2)\b(?![.,]\d)', '\b1z\b']
-    engines: [ea113-1.6-mpi, ea111-1.2-tsi, ea111-1.4-tsi, ea888-1.8-tsi-early]
+    vin_codes: [1Z]
+    engines: [ea113-1.6-mpi, vw-1.6-fsi, ea111-1.2-tsi, ea111-1.4-tsi, ea888-1.8-tsi-early,
+              vw-2.0-fsi]
 
   octavia-3:
     label: Škoda Octavia III (5E)
     models: [skoda:octavia]
     years: [2013, 2020]
     title_hints: ['octavia,?\s*(iii|3)\b(?![.,]\d)', '\b5e\b']
+    vin_codes: [NE]
     engines: [ea211-1.0-tsi, ea211-1.2-tsi, ea211-1.4-tsi, ea211-1.5-tsi, ea211-1.6-mpi,
               ea888-1.8-tsi, ea888-2.0-tsi]
 
@@ -33,6 +47,7 @@ generations:
     models: [skoda:octavia]
     years: [2020, null]
     title_hints: ['octavia,?\s*(iv|4)\b(?![.,]\d)']
+    vin_codes: [NX]
     engines: [ea211-1.0-tsi, ea211-1.5-tsi, ea888-2.0-tsi]
 
   golf-5:
@@ -54,6 +69,7 @@ generations:
     models: [volkswagen:golf, volkswagen:golf-variant]
     years: [2013, 2020]
     title_hints: ['golf\s*(variant\s*)?(vii|7)\b(?![.,]\d)']
+    vin_codes: [AU]
     engines: [ea211-1.0-tsi, ea211-1.2-tsi, ea211-1.4-tsi, ea211-1.5-tsi, ea211-1.6-mpi]
 
   golf-8:
@@ -61,6 +77,7 @@ generations:
     models: [volkswagen:golf, volkswagen:golf-variant]
     years: [2020, null]
     title_hints: ['golf\s*(variant\s*)?(viii|8)\b(?![.,]\d)']
+    vin_codes: [CD]
     engines: [ea211-1.0-tsi, ea211-1.5-tsi]
 
   focus-2:
@@ -134,6 +151,7 @@ generations:
     models: [skoda:superb]
     years: [2008, 2015]
     title_hints: ['superb,?\s*(ii|2)\b(?![.,]\d)', '\b3t\b']
+    vin_codes: [3T]
     engines: [ea111-1.4-tsi, ea888-1.8-tsi-early, ea888-2.0-tsi, vr6-3.6-fsi]
 
   superb-3:
@@ -141,6 +159,7 @@ generations:
     models: [skoda:superb]
     years: [2015, 2024]
     title_hints: ['superb,?\s*(iii|3)\b(?![.,]\d)', '\b3v\b']
+    vin_codes: [3V]
     engines: [ea211-1.4-tsi, ea211-1.5-tsi, ea888-1.8-tsi, ea888-2.0-tsi]
 
   # Passat: estate (Variant) only; the saloon has no liftback.
@@ -164,6 +183,7 @@ generations:
     models: [volkswagen:passat, volkswagen:passat-variant]
     years: [2014, 2023]
     title_hints: ['\bb8\b']
+    vin_codes: [3G]
     engines: [ea211-1.4-tsi, ea211-1.5-tsi, ea888-1.8-tsi, ea888-2.0-tsi]
 
   # Mazda 6: estate, plus the GH's 5-door liftback (listed as hatchback or liftback).
@@ -209,6 +229,7 @@ generations:
     models: [seat:leon]
     years: [2014, 2020]
     title_hints: ['leon\s*(st\s*)?(iii|3)\b(?![.,]\d)', '\b5f\b']
+    vin_codes: [5F]
     engines: [ea211-1.0-tsi, ea211-1.2-tsi, ea211-1.4-tsi, ea211-1.5-tsi, ea211-1.6-mpi,
               ea888-1.8-tsi, ea888-2.0-tsi]
 
@@ -225,6 +246,7 @@ generations:
     label: Škoda Rapid (NH)
     models: [skoda:rapid]
     years: [2012, 2019]
+    vin_codes: [NH]
     engines: [ea111-1.2-htp, ea111-1.2-tsi, ea211-1.0-tsi, ea211-1.2-tsi, ea111-1.4-tsi,
               ea211-1.4-tsi, ea111-1.6-mpi, ea211-1.6-mpi]
 

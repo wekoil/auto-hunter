@@ -95,13 +95,18 @@ class Classification:
 
 
 def classify(listing: Listing, catalog: Catalog) -> Classification:
-    """Narrow down generation and engine: year, title hints, engine specs, engine hints."""
+    """Narrow down generation and engine: year, VIN, title hints, engine specs, engine hints."""
     gens: list[Generation] = catalog.generations_for(listing.model_key)
     if not gens:
         return Classification(engine_known=engine_hints(listing).known)
 
     if listing.year is not None:
         gens = [g for g in gens if g.covers_year(listing.year)]
+    # The VIN's type code settles changeover years (a 2013 Octavia is a II or a III).
+    vin_code = listing.vin[6:8].upper() if listing.vin and len(listing.vin) == 17 else None
+    by_vin = [g for g in gens if vin_code in g.vin_codes]
+    if by_vin:
+        gens = by_vin
     text = fold(f"{listing.title} {listing.variant or ''}")
     hinted = [g for g in gens if any(re.search(h, text) for h in g.title_hints)]
     if hinted:

@@ -56,6 +56,7 @@ several is stored once and listed with all its profiles.
 | Profile | Searches | Engines |
 |---|---|---|
 | A-octavia3-1.6mpi | Octavia III, estate or liftback | 1.6 MPI (EA211) |
+| A2-octavia-older-1.6mpi | Octavia II, Octavia I Tour (2004+) | 1.6 MPI (EA113) |
 | B-golf-variant-1.6mpi | Golf V/VI/VII Variant | 1.6 MPI (EA113, EA211) |
 | C-golf-variant-1.4tsi | Golf VII Variant | 1.4 TSI (EA211 only) |
 | D-octavia3-other-petrol | Octavia III, estate or liftback | 1.0/1.2/1.4/1.5 TSI (EA211), 1.8 TSI |
@@ -99,6 +100,7 @@ octavia-3:
   years: [2013, 2020]              # estate manufacturing years; null = still produced
   title_hints: ['octavia,?\s*(iii|3)\b(?![.,]\d)', '\b5e\b']
   engines: [ea211-1.6-mpi, ...]    # engines this generation was sold with
+  vin_codes: [NE]                  # optional: VW-group type code, VIN characters 7-8
 ```
 
 - **years** of adjacent generations deliberately overlap in changeover years. The
@@ -134,10 +136,12 @@ The notes are research starting points, not verified facts.
 
 1. Take the catalog generations for the car's Sauto model.
 2. Keep those whose years include the car's year.
-3. If any title hint matches, keep only the hinted generations.
-4. Form every (generation, engine) pair; drop pairs whose engine contradicts the known
+3. If the VIN's type code (characters 7-8) matches some generations' `vin_codes`, keep
+   only those. This settles changeover years: a 2013 Octavia is `1Z` (II) or `NE` (III).
+4. If any title hint matches, keep only the hinted generations.
+5. Form every (generation, engine) pair; drop pairs whose engine contradicts the known
    displacement, power or turbo keyword.
-5. One pair left → identified. Several → unclear (flagged). None but specs known →
+6. One pair left → identified. Several → unclear (flagged). None but specs known →
    "engine not in catalog" (dropped by engine-restricted profiles).
 
 ---
