@@ -38,8 +38,8 @@ GEARBOX = {"automaticka": "A", "manualni": "S"}
 # Their display texts -> our names.
 FUEL_TEXT = {"benzin": "benzin", "diesel": "nafta", "elektro": "elektro",
              "zemni plyn (cng)": "cng-benzin", "kapalny plyn": "lpg-benzin"}
-BODY_TEXT = {"kombi": "kombi", "limuzina/sedan": "sedanlimuzina", "suv/terenni vuz": "suv",
-             "van/minibus": "mpv"}
+BODY_TEXT = {"kombi": "kombi", "liftback": "liftback", "hatchback": "hatchback",
+             "limuzina/sedan": "sedanlimuzina", "suv/terenni vuz": "suv", "van/minibus": "mpv"}
 
 
 class DasWeltAutoCollector(Collector):
@@ -91,7 +91,8 @@ class DasWeltAutoCollector(Collector):
             complete = False
             for page in range(1, max(1, self._collection.max_results_per_query // PAGE_SIZE) + 1):
                 data = self._search({**params, "page": page, "pageSize": PAGE_SIZE})
-                content = data["resultListPage"]["content"]
+                # With no matches the site fills the page with other cars instead.
+                content = data["resultListPage"]["content"] if data.get("count") else []
                 for item in content:
                     items[vehicle_id(item)] = item
                 if not content or len(items) >= data.get("count", 0):
@@ -104,8 +105,9 @@ class DasWeltAutoCollector(Collector):
         return self._query_cache[key]
 
     def fetch(self, source_id: str) -> Listing | None:
-        content = self._search({"vehicleIds": source_id, "pageSize": 1})["resultListPage"]["content"]
-        if not content:
+        data = self._search({"vehicleIds": source_id, "pageSize": 1})
+        content = data["resultListPage"]["content"]
+        if not data.get("count") or not content:
             return None
         # model_key unknown here; the pipeline keeps the stored one (merge_listings).
         return parse_vehicle(content[0], None)

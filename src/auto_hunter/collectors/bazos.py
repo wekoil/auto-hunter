@@ -93,6 +93,12 @@ class BazosCollector(Collector):
             (key, m["category"], re.compile(m["title"]))
             for key, m in (source_config.get("models") or {}).items()
         ]
+        # Model key -> body styles the model was ever sold in (empty: unknown).
+        self._bodies = {key: set(m.get("bodies") or [])
+                        for key, m in (source_config.get("models") or {}).items()}
+        # Model key -> {body: title regex} for model-specific names ("Leon ST", "Logan MCV").
+        self._body_hints = {key: {b: re.compile(r) for b, r in (m.get("body_hints") or {}).items()}
+                            for key, m in (source_config.get("models") or {}).items()}
         self._crawl_cache: dict[str, list[Listing]] = {}
 
     def close(self) -> None:
@@ -112,15 +118,22 @@ class BazosCollector(Collector):
             for listing in self._crawl(category):
                 if listing.model_key not in profile.models:
                     continue
-                # Done here because Bazoš can't filter server-side. A listing that
-                # never says it's an estate can't be told from a hatchback, so when a
-                # body is required, silence counts as "no".
-                if profile.body and listing.body not in profile.body:
+                if not self._body_ok(listing, profile):
                     continue
                 if profile.fuel and listing.fuel and listing.fuel not in profile.fuel:
                     continue
                 listings.append(listing)
         return SearchResult(listings, complete=False)
+
+    def _body_ok(self, listing: Listing, profile: SearchProfile) -> bool:
+        """Done here because Bazoš can't filter server-side. A listing that never says
+        it's an estate can't be told from a hatchback, so when a body is required,
+        silence counts as "no", unless every body the model comes in is acceptable
+        (an Octavia is a liftback or an estate either way)."""
+        if not profile.body or listing.body in profile.body:
+            return True
+        bodies = self._bodies.get(listing.model_key or "")
+        return listing.body is None and bool(bodies) and bodies <= set(profile.body)
 
     def _crawl(self, category: str) -> list[Listing]:
         """New and bumped listings in a category since the previous crawl."""
@@ -145,7 +158,7 @@ class BazosCollector(Collector):
                     continue
                 key = self.model_key_for(item["title"], category)
                 if key is not None:
-                    found[item["id"]] = listing_from_item(item, key)
+                    found[item["id"]] = self._with_body_hint(listing_from_item(item, key))
             quiet_pages = quiet_pages + 1 if seen_before.issuperset(page_ids) else 0
             if quiet_pages >= 2:
                 break
@@ -167,6 +180,16 @@ class BazosCollector(Collector):
             return None
         listing = parse_detail_page(resp.text, source_id)
         listing.model_key = self.model_key_for(listing.title)
+        return self._with_body_hint(listing)
+
+    def _with_body_hint(self, listing: Listing) -> Listing:
+        """Body from a model-specific title word when the text names no body."""
+        if listing.body is None:
+            title = fold(listing.title)
+            for body, pattern in self._body_hints.get(listing.model_key or "", {}).items():
+                if pattern.search(title):
+                    listing.body = body
+                    break
         return listing
 
 

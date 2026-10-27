@@ -1,5 +1,5 @@
-# Layer 2: vehicle profiles. What to look for; global requirements (petrol, estate,
-# budget) are inherited from requirements.yaml.
+# Layer 2: vehicle profiles. What to look for; global requirements (petrol/hybrid,
+# estate/liftback, budget) are inherited from requirements.yaml.
 #
 # generations: ids from catalog.yaml; they determine which Sauto models are searched
 #              and the default year range. A listing must plausibly be one of them.
@@ -7,6 +7,9 @@
 #              something else are dropped. Unknown/unclear engines are kept and flagged.
 # models:      extra Sauto "make:model" names searched without generation logic.
 # priority:    high | medium | exploratory (ordering in the shortlist)
+# body:        overrides the global body styles. Octavias and Superbs are only ever
+#              liftbacks or estates, but Sauto sellers often tag the liftback as a
+#              sedan or hatchback, so Škoda profiles accept those tags too.
 #
 # The same car can match several profiles; it is stored once.
 
@@ -15,12 +18,14 @@ profiles:
     priority: high
     generations: [octavia-3]
     engines: [ea211-1.6-mpi]
+    body: [kombi, liftback, hatchback, sedanlimuzina]
 
   - name: B-golf-variant-1.6mpi
     priority: high
     # In practice mostly Golf V/VI Variant (EA113); 1.6 MPI was rare in the Golf VII Variant.
     generations: [golf-5, golf-6, golf-7]
     engines: [ea113-1.6-mpi, ea211-1.6-mpi]
+    body: [kombi]
 
   - name: C-golf-variant-1.4tsi
     priority: high
@@ -28,30 +33,94 @@ profiles:
     # changeover-year cars that might be EA111 are kept with a warning.
     generations: [golf-7]
     engines: [ea211-1.4-tsi]
+    body: [kombi]
 
   - name: D-octavia3-other-petrol
     priority: medium
     generations: [octavia-3]
     engines: [ea211-1.0-tsi, ea211-1.2-tsi, ea211-1.4-tsi, ea211-1.5-tsi, ea888-1.8-tsi]
+    body: [kombi, liftback, hatchback, sedanlimuzina]
 
   - name: E-focus-estate
     priority: medium
     generations: [focus-2, focus-3, focus-4]
     year_min: 2008   # 1.6 Ti-VCT arrived in the Focus II around 2008
     engines: [ford-1.6-tivct, ford-1.0-ecoboost, ford-1.5-ecoboost, ford-1.6-ecoboost]
+    body: [kombi]
 
   - name: G-i30-ceed-1.6gdi
     priority: medium
     # The naturally aspirated 1.6 GDI was only sold in the estate i30 GD and cee'd JD.
     generations: [i30-2, ceed-2]
     engines: [hyundai-kia-1.6-gdi]
+    body: [kombi]
+
+  - name: H-superb
+    priority: high
+    # Superb II only qualifies with the 1.8 TSI (its 1.4 TSI is EA111); the Superb III
+    # mostly tops the budget, so expect older, higher-mileage ones.
+    generations: [superb-2, superb-3]
+    engines: [ea888-1.8-tsi-early, ea211-1.4-tsi, ea211-1.5-tsi, ea888-1.8-tsi]
+    body: [kombi, liftback, hatchback, sedanlimuzina]
+
+  - name: I-passat-variant
+    priority: medium
+    # B6/B7 1.4 TSI is EA111 (excluded), so those years leave the 1.6 MPI and 1.8 TSI.
+    generations: [passat-b6, passat-b7, passat-b8]
+    engines: [ea113-1.6-mpi, ea888-1.8-tsi-early, ea211-1.4-tsi, ea211-1.5-tsi, ea888-1.8-tsi]
+    body: [kombi]
+
+  - name: J-mazda6
+    priority: medium
+    # Every petrol engine is naturally aspirated with a timing chain.
+    generations: [mazda6-gh, mazda6-gj]
+    body: [kombi, liftback, hatchback]
+
+  - name: K-toyota-estate
+    priority: medium
+    # Auris Touring Sports, Avensis Wagon, Corolla Touring Sports; hybrids included.
+    generations: [auris-2, avensis-t27, corolla-12]
+    body: [kombi]
+
+  - name: L-leon-st
+    priority: high
+    # Octavia III technology (EA211) in a slightly smaller, usually cheaper estate.
+    generations: [leon-3, leon-4]
+    engines: [ea211-1.6-mpi, ea211-1.0-tsi, ea211-1.2-tsi, ea211-1.4-tsi, ea211-1.5-tsi,
+              ea888-1.8-tsi]
+    body: [kombi]
+
+  - name: M-rapid-toledo
+    priority: medium
+    # Liftback only. Sauto tags the Rapid Spaceback (hatchback) as "hatchback", and many
+    # real liftbacks too; they can't be told apart, so only liftback/sedan tags are
+    # taken. The 55 kW 1.2 MPI is left out.
+    generations: [rapid-1, toledo-4]
+    engines: [ea211-1.0-tsi, ea211-1.2-tsi, ea211-1.4-tsi, ea111-1.6-mpi, ea211-1.6-mpi]
+    body: [liftback, sedanlimuzina]
+    exclude_keywords: [spaceback]
+
+  - name: N-honda-tourer
+    priority: medium
+    generations: [civic-9-tourer, accord-8-tourer]
+    body: [kombi]
+
+  - name: O-logan-mcv
+    priority: medium
+    generations: [logan-1-mcv, logan-2-mcv]
+    body: [kombi]
+
+  - name: P-i40-cw
+    priority: medium
+    generations: [i40-1]
+    engines: [hyundai-kia-1.6-gdi, hyundai-kia-2.0-mpi, hyundai-kia-2.0-gdi]
+    body: [kombi]
 
   - name: F-alternatives
     priority: exploratory
     # No engine catalog yet: every engine is flagged "not yet vetted".
+    body: [kombi]
     models:
-      - toyota:auris        # Touring Sports (estate only exists from 2013)
-      - toyota:avensis      # a bit larger than the Octavia; worth a look
       - hyundai:i30
       - kia:cee-d
       - kia:cee-d-sw

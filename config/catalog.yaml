@@ -128,6 +128,148 @@ generations:
     engines: [hyundai-kia-1.0-tgdi, hyundai-kia-1.4-mpi, hyundai-kia-1.4-tgdi,
               hyundai-kia-1.5-dpi, hyundai-kia-1.5-tgdi, hyundai-kia-1.6-tgdi]
 
+  # Liftback + estate; the Superb I (2001-2008) was a sedan, so it isn't listed.
+  superb-2:
+    label: Škoda Superb II (3T)
+    models: [skoda:superb]
+    years: [2008, 2015]
+    title_hints: ['superb,?\s*(ii|2)\b(?![.,]\d)', '\b3t\b']
+    engines: [ea111-1.4-tsi, ea888-1.8-tsi-early, ea888-2.0-tsi, vr6-3.6-fsi]
+
+  superb-3:
+    label: Škoda Superb III (3V)
+    models: [skoda:superb]
+    years: [2015, 2024]
+    title_hints: ['superb,?\s*(iii|3)\b(?![.,]\d)', '\b3v\b']
+    engines: [ea211-1.4-tsi, ea211-1.5-tsi, ea888-1.8-tsi, ea888-2.0-tsi]
+
+  # Passat: estate (Variant) only; the saloon has no liftback.
+  passat-b6:
+    label: VW Passat B6 Variant
+    models: [volkswagen:passat, volkswagen:passat-variant]
+    years: [2005, 2011]
+    title_hints: ['\bb6\b', '\b3c\b']
+    engines: [ea113-1.6-mpi, vw-1.6-fsi, ea111-1.4-tsi, ea888-1.8-tsi-early, vw-2.0-fsi,
+              ea888-2.0-tsi, vr6-3.2-fsi]
+
+  passat-b7:
+    label: VW Passat B7 Variant
+    models: [volkswagen:passat, volkswagen:passat-variant]
+    years: [2010, 2015]
+    title_hints: ['\bb7\b']
+    engines: [ea111-1.4-tsi, ea888-1.8-tsi-early, ea888-2.0-tsi]
+
+  passat-b8:
+    label: VW Passat B8 Variant
+    models: [volkswagen:passat, volkswagen:passat-variant]
+    years: [2014, 2023]
+    title_hints: ['\bb8\b']
+    engines: [ea211-1.4-tsi, ea211-1.5-tsi, ea888-1.8-tsi, ea888-2.0-tsi]
+
+  # Mazda 6: estate, plus the GH's 5-door liftback (listed as hatchback or liftback).
+  mazda6-gh:
+    label: Mazda 6 (GH)
+    models: [mazda:6]
+    years: [2008, 2013]
+    title_hints: ['\bgh\b']
+    engines: [mazda-1.8-mzr, mazda-2.0-mzr, mazda-2.5-mzr]
+
+  mazda6-gj:
+    label: Mazda 6 (GJ/GL)
+    models: [mazda:6]
+    years: [2012, null]
+    title_hints: ['\bgj\b', '\bgl\b', 'skyactiv']
+    engines: [mazda-2.0-skyactiv-g, mazda-2.5-skyactiv-g]
+
+  # Toyota: estate versions only (Touring Sports / Wagon).
+  auris-2:
+    label: Toyota Auris II Touring Sports
+    models: [toyota:auris]
+    years: [2013, 2019]
+    title_hints: ['auris\s*(ii|2)\b(?![.,]\d)', 'touring\s*sports?']
+    engines: [toyota-1.33-dvvti, toyota-1.6-valvematic, toyota-1.2-t, toyota-1.8-hybrid]
+
+  avensis-t27:
+    label: Toyota Avensis Wagon (T27)
+    models: [toyota:avensis]
+    years: [2009, 2018]
+    title_hints: ['\bt27\b']
+    engines: [toyota-1.6-valvematic, toyota-1.8-valvematic, toyota-2.0-valvematic]
+
+  corolla-12:
+    label: Toyota Corolla Touring Sports (E210)
+    models: [toyota:corolla]
+    years: [2019, null]
+    title_hints: ['\be21\d?\b', 'touring\s*sports?']
+    engines: [toyota-1.2-t, toyota-1.8-hybrid, toyota-2.0-hybrid]
+
+  # Seat Leon ST: the Octavia III's platform and engines, estate only.
+  leon-3:
+    label: Seat Leon III ST (5F)
+    models: [seat:leon]
+    years: [2014, 2020]
+    title_hints: ['leon\s*(st\s*)?(iii|3)\b(?![.,]\d)', '\b5f\b']
+    engines: [ea211-1.0-tsi, ea211-1.2-tsi, ea211-1.4-tsi, ea211-1.5-tsi, ea211-1.6-mpi,
+              ea888-1.8-tsi, ea888-2.0-tsi]
+
+  leon-4:
+    label: Seat Leon IV Sportstourer (KL)
+    models: [seat:leon]
+    years: [2020, null]
+    title_hints: ['leon\s*(st\s*|sportstourer\s*)?(iv|4)\b(?![.,]\d)', '\bkl\b']
+    engines: [ea211-1.0-tsi, ea211-1.5-tsi, ea888-2.0-tsi]
+
+  # Rapid and Toledo IV are twins (liftback). The Rapid Spaceback is a hatchback and
+  # shares the Sauto model, so it can only be told apart by its name.
+  rapid-1:
+    label: Škoda Rapid (NH)
+    models: [skoda:rapid]
+    years: [2012, 2019]
+    engines: [ea111-1.2-htp, ea111-1.2-tsi, ea211-1.0-tsi, ea211-1.2-tsi, ea111-1.4-tsi,
+              ea211-1.4-tsi, ea111-1.6-mpi, ea211-1.6-mpi]
+
+  toledo-4:
+    label: Seat Toledo IV (KG)
+    models: [seat:toledo]
+    years: [2012, 2019]
+    engines: [ea111-1.2-htp, ea111-1.2-tsi, ea211-1.0-tsi, ea211-1.2-tsi, ea111-1.4-tsi,
+              ea211-1.4-tsi, ea111-1.6-mpi, ea211-1.6-mpi]
+
+  # Honda: estate versions only.
+  civic-9-tourer:
+    label: Honda Civic IX Tourer (FK)
+    models: [honda:civic]
+    years: [2014, 2018]
+    title_hints: ['tourer']
+    engines: [honda-1.8-ivtec]
+
+  accord-8-tourer:
+    label: Honda Accord VIII Tourer (CW)
+    models: [honda:accord]
+    years: [2008, 2015]
+    title_hints: ['tourer']
+    engines: [honda-2.0-ivtec, honda-2.4-ivtec]
+
+  # Dacia Logan MCV (estate); the Logan III (2020+) has no estate.
+  logan-1-mcv:
+    label: Dacia Logan MCV I
+    models: [dacia:logan]
+    years: [2006, 2013]
+    engines: [renault-1.4-mpi, renault-1.6-mpi-8v, renault-1.6-16v]
+
+  logan-2-mcv:
+    label: Dacia Logan MCV II
+    models: [dacia:logan]
+    years: [2013, 2020]
+    engines: [renault-1.2-16v, renault-1.0-sce, renault-0.9-tce]
+
+  # Hyundai i40: D-segment saloon and estate (CW/Wagon); petrol engines are naturally aspirated.
+  i40-1:
+    label: Hyundai i40 CW (VF)
+    models: [hyundai:i40]
+    years: [2011, 2019]
+    engines: [hyundai-kia-1.6-gdi, hyundai-kia-2.0-mpi, hyundai-kia-2.0-gdi]
+
 engines:
   # --- VW group -------------------------------------------------------------------
   ea211-1.6-mpi:
@@ -167,7 +309,7 @@ engines:
   ea211-1.2-tsi:
     label: 1.2 TSI (EA211)
     liters: 1.2
-    power_kw: [63, 77, 81]
+    power_kw: [63, 66, 77, 81]
     turbo: true
     status: ok
     notes: Belt-driven 4-cylinder.
@@ -185,7 +327,7 @@ engines:
   ea211-1.0-tsi:
     label: 1.0 TSI (EA211)
     liters: 1.0
-    power_kw: [81, 85]
+    power_kw: [63, 70, 81, 85]
     turbo: true
     status: unvetted
     automatic_note: *dq200
@@ -216,7 +358,7 @@ engines:
   ea888-2.0-tsi:
     label: 2.0 TSI (EA888)
     liters: 2.0
-    power_kw: [140, 162, 169, 180, 182, 195]
+    power_kw: [140, 147, 155, 162, 169, 180, 182, 195, 200, 206]
     turbo: true
     status: unvetted
     notes: Performance-oriented (mostly RS); outside your priorities.
@@ -288,6 +430,14 @@ engines:
     turbo: false
     status: unvetted
 
+  hyundai-kia-2.0-gdi:
+    label: 2.0 GDI (Nu)
+    liters: 2.0
+    power_kw: [130]
+    turbo: false
+    status: unvetted
+    title_hints: ['(?<![a-z-])gdi\b']
+
   hyundai-kia-1.5-dpi:
     label: 1.5 DPI (Smartstream)
     liters: 1.5
@@ -323,3 +473,224 @@ engines:
     turbo: true
     status: unvetted
     notes: Performance-oriented (GT); outside your priorities.
+
+  # --- VW group, older / larger ----------------------------------------------------
+  vw-1.6-fsi:
+    label: 1.6 FSI
+    liters: 1.6
+    power_kw: [85]
+    turbo: false
+    status: unvetted
+    title_hints: ['(?<![a-z])fsi\b']
+
+  vw-2.0-fsi:
+    label: 2.0 FSI
+    liters: 2.0
+    power_kw: [110]
+    turbo: false
+    status: unvetted
+    title_hints: ['(?<![a-z])fsi\b']
+
+  vr6-3.2-fsi:
+    label: 3.2 V6 FSI
+    liters: 3.2
+    power_kw: [184]
+    turbo: false
+    status: unvetted
+    notes: Large V6, mostly 4MOTION; outside your priorities.
+
+  vr6-3.6-fsi:
+    label: 3.6 V6 FSI
+    liters: 3.6
+    power_kw: [191, 220]
+    turbo: false
+    status: unvetted
+    notes: Large V6, 4x4; outside your priorities.
+
+  # --- Mazda ----------------------------------------------------------------------
+  mazda-1.8-mzr:
+    label: 1.8 MZR
+    liters: 1.8
+    power_kw: [88]
+    turbo: false
+    status: ok
+    notes: Naturally aspirated with timing chain. On the Mazda 6 GH, check for rust (rear wheel arches, sills).
+
+  mazda-2.0-mzr:
+    label: 2.0 MZR / DISI
+    liters: 2.0
+    power_kw: [108, 114]
+    turbo: false
+    status: ok
+    notes: Naturally aspirated with timing chain (114 kW is the direct-injection DISI). On the Mazda 6 GH, check for rust (rear wheel arches, sills).
+
+  mazda-2.5-mzr:
+    label: 2.5 MZR
+    liters: 2.5
+    power_kw: [125]
+    turbo: false
+    status: ok
+    notes: Naturally aspirated with timing chain; thirsty. On the Mazda 6 GH, check for rust.
+
+  mazda-2.0-skyactiv-g:
+    label: 2.0 Skyactiv-G
+    liters: 2.0
+    power_kw: [107, 110, 121]
+    turbo: false
+    status: ok
+    notes: Naturally aspirated direct injection with timing chain, no turbo.
+
+  mazda-2.5-skyactiv-g:
+    label: 2.5 Skyactiv-G
+    liters: 2.5
+    power_kw: [141, 143]
+    turbo: false
+    status: ok
+    notes: Naturally aspirated with timing chain; thirstier than the 2.0.
+
+  # --- Toyota ---------------------------------------------------------------------
+  toyota-1.33-dvvti:
+    label: 1.33 Dual VVT-i
+    liters: 1.3
+    power_kw: [73]
+    turbo: false
+    status: unvetted
+    notes: Small for an estate.
+
+  toyota-1.6-valvematic:
+    label: 1.6 Valvematic
+    liters: 1.6
+    power_kw: [97, 98]
+    turbo: false
+    status: ok
+    title_hints: ['valvematic']
+    notes: Naturally aspirated with timing chain.
+
+  toyota-1.8-valvematic:
+    label: 1.8 Valvematic
+    liters: 1.8
+    power_kw: [108]
+    turbo: false
+    status: unvetted
+    title_hints: ['valvematic']
+
+  toyota-2.0-valvematic:
+    label: 2.0 Valvematic
+    liters: 2.0
+    power_kw: [112]
+    turbo: false
+    status: unvetted
+    title_hints: ['valvematic']
+
+  toyota-1.2-t:
+    label: 1.2 Turbo (8NR-FTS)
+    liters: 1.2
+    power_kw: [85]
+    turbo: true
+    status: unvetted
+
+  # Listings quote either the combustion engine's power or the system total.
+  toyota-1.8-hybrid:
+    label: 1.8 Hybrid (HSD)
+    liters: 1.8
+    power_kw: [73, 90, 100, 103]
+    turbo: false
+    status: ok
+    title_hints: ['hybrid', '\bhsd\b']
+    notes: Full hybrid with e-CVT (no clutch, no turbo); widely regarded as very durable. Ask about hybrid battery health and service history.
+
+  toyota-2.0-hybrid:
+    label: 2.0 Hybrid
+    liters: 2.0
+    power_kw: [112, 135]
+    turbo: false
+    status: unvetted
+    title_hints: ['hybrid']
+
+  ea111-1.2-htp:
+    label: 1.2 MPI/HTP (EA111, 3-cylinder)
+    liters: 1.2
+    power_kw: [51, 55]
+    turbo: false
+    status: unvetted
+    title_hints: ['\bhtp\b', '(?<![a-z])mpi\b']
+    notes: 3-cylinder, 55 kW; very weak for a car this size.
+
+  ea111-1.6-mpi:
+    label: 1.6 MPI (EA111)
+    liters: 1.6
+    power_kw: [66, 77]
+    turbo: false
+    status: unvetted
+
+  # --- Honda ----------------------------------------------------------------------
+  honda-1.8-ivtec:
+    label: 1.8 i-VTEC
+    liters: 1.8
+    power_kw: [104]
+    turbo: false
+    status: ok
+    notes: Naturally aspirated with timing chain.
+
+  honda-2.0-ivtec:
+    label: 2.0 i-VTEC
+    liters: 2.0
+    power_kw: [115]
+    turbo: false
+    status: ok
+    notes: Naturally aspirated with timing chain.
+
+  honda-2.4-ivtec:
+    label: 2.4 i-VTEC
+    liters: 2.4
+    power_kw: [148]
+    turbo: false
+    status: ok
+    notes: Naturally aspirated with timing chain; thirsty.
+
+  # --- Dacia / Renault ------------------------------------------------------------
+  renault-1.4-mpi:
+    label: 1.4 MPI (K7J)
+    liters: 1.4
+    power_kw: [55]
+    turbo: false
+    status: unvetted
+
+  renault-1.6-mpi-8v:
+    label: 1.6 MPI 8V (K7M)
+    liters: 1.6
+    power_kw: [62, 64]
+    turbo: false
+    status: ok
+    notes: Simple 8-valve engine with timing belt. Verify belt replacement.
+
+  renault-1.6-16v:
+    label: 1.6 16V (K4M)
+    liters: 1.6
+    power_kw: [75, 77]
+    turbo: false
+    status: unvetted
+    notes: Timing belt. Verify belt replacement.
+
+  renault-1.2-16v:
+    label: 1.2 16V (D4F)
+    liters: 1.2
+    power_kw: [54]
+    turbo: false
+    status: unvetted
+    notes: 54 kW; weak for a loaded estate.
+
+  renault-1.0-sce:
+    label: 1.0 SCe (B4D)
+    liters: 1.0
+    power_kw: [54]
+    turbo: false
+    status: unvetted
+    notes: 3-cylinder, 54 kW; weak for a loaded estate.
+
+  renault-0.9-tce:
+    label: 0.9 TCe (H4Bt)
+    liters: 0.9
+    power_kw: [66]
+    turbo: true
+    status: unvetted

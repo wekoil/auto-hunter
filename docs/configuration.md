@@ -27,7 +27,7 @@ Inherited by every profile.
 
 | Key | Meaning |
 |---|---|
-| `fuel` | Allowed fuels. Sent to the API as a filter. |
+| `fuel` | Allowed fuels. Sent to the API as a filter. Currently petrol and petrol hybrids. |
 | `body` | Allowed body styles. Note Sauto tags some MPVs (Touran, Roomster) as `kombi` too, which is why profiles name models explicitly. |
 | `price_max` | Overall budget in CZK. A profile may set a lower one, never higher. |
 | `mileage_max` | Hard mileage cap. Keep it above your *preferred* limit (in evaluation.yaml) so good higher-mileage cars are flagged, not hidden. |
@@ -46,6 +46,7 @@ several is stored once and listed with all its profiles.
 | `engines` | Catalog engine ids. If set, cars whose specs rule out all of these are dropped; cars with unknown/unclear engines stay, flagged. Omit to accept any engine. |
 | `models` | Extra Sauto `make:model` keys searched without generation logic (used by exploratory profiles). |
 | `year_min`, `year_max` | Override the generations' year span. |
+| `body` | Override the global body styles, e.g. `[kombi]` for models with no liftback. |
 | `price_max`, `price_min`, `mileage_max` | Override the global values (within budget). |
 | `gearbox` | Restrict gearbox, e.g. `[manualni]`. Omit for either. |
 | `exclude_keywords` | Added to the global list. |
@@ -54,12 +55,22 @@ several is stored once and listed with all its profiles.
 
 | Profile | Searches | Engines |
 |---|---|---|
-| A-octavia3-1.6mpi | Octavia III | 1.6 MPI (EA211) |
+| A-octavia3-1.6mpi | Octavia III, estate or liftback | 1.6 MPI (EA211) |
 | B-golf-variant-1.6mpi | Golf V/VI/VII Variant | 1.6 MPI (EA113, EA211) |
 | C-golf-variant-1.4tsi | Golf VII Variant | 1.4 TSI (EA211 only) |
-| D-octavia3-other-petrol | Octavia III | 1.0/1.2/1.4/1.5 TSI (EA211), 1.8 TSI |
+| D-octavia3-other-petrol | Octavia III, estate or liftback | 1.0/1.2/1.4/1.5 TSI (EA211), 1.8 TSI |
 | E-focus-estate | Focus II/III/IV kombi, 2008+ | 1.6 Ti-VCT, 1.0/1.5/1.6 EcoBoost |
-| F-alternatives | Auris, Avensis, i30, cee'd, Astra (2010+) | any (all flagged unvetted) |
+| G-i30-ceed-1.6gdi | i30 GD kombi, cee'd JD SW | 1.6 GDI |
+| H-superb | Superb II/III, estate or liftback | 1.8 TSI (EA888), 1.4/1.5 TSI (EA211) |
+| I-passat-variant | Passat B6/B7/B8 Variant | 1.6 MPI (EA113), 1.8 TSI (EA888), 1.4/1.5 TSI (EA211) |
+| J-mazda6 | Mazda 6 GH/GJ, estate or liftback | any (MZR, Skyactiv-G) |
+| K-toyota-estate | Auris II TS, Avensis T27, Corolla TS | any, hybrids included |
+| L-leon-st | Seat Leon III/IV ST | 1.6 MPI, 1.0/1.2/1.4/1.5 TSI (EA211), 1.8 TSI |
+| M-rapid-toledo | Škoda Rapid, Seat Toledo IV (liftback, no Spaceback) | 1.0/1.2/1.4 TSI (EA211), 1.6 MPI |
+| N-honda-tourer | Civic IX Tourer, Accord VIII Tourer | any (i-VTEC) |
+| O-logan-mcv | Dacia Logan MCV I/II | any |
+| P-i40-cw | Hyundai i40 CW | 1.6 GDI, 2.0 MPI/GDI |
+| F-alternatives | i30, cee'd, Astra (2010+) | any (all flagged unvetted) |
 
 ## evaluation.yaml: evaluation rules
 
@@ -237,6 +248,10 @@ models:
 - Bazoš has no body field. A listing is accepted as an estate only if its text says
   so (combi, kombi, variant, SW, touring, tourer, caravan...). One that doesn't say
   is skipped when a profile requires a body type. Most estate ads do say it.
+  Exception: an entry's optional `bodies` lists every body the model comes in
+  (Octavia, Superb: `[kombi, liftback]`); if the profile accepts all of them, a
+  listing that doesn't say is kept. `body_hints` maps a body to a title regex for
+  model-specific names that `textspecs` can't know (`Leon ST`, `Logan MCV`).
 - Listings with a Slovak postcode are skipped.
 
 How the incremental crawl works and what it can't see is described in

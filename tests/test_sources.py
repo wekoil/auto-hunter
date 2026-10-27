@@ -42,9 +42,10 @@ DETAIL = """<html><head><link rel="canonical" href="https://auto.bazos.cz/inzera
 BAZOS_CONFIG = {
     "max_pages_per_category": 5,
     "models": {
-        "skoda:octavia": {"category": "skoda", "title": r"\boctavi"},
+        "skoda:octavia": {"category": "skoda", "title": r"\boctavi", "bodies": ["kombi", "liftback"]},
         "volkswagen:golf-variant": {"category": "volkswagen", "title": r"\bgolf\b.*\bvariant\b"},
         "volkswagen:golf": {"category": "volkswagen", "title": r"\bgolf\b(?!\s*(plus|sportsvan))"},
+        "seat:leon": {"category": "seat", "title": r"\bleon\b", "body_hints": {"kombi": r"\bst\b"}},
     },
 }
 PROFILE = SearchProfile(name="p", models=["skoda:octavia"], fuel=["benzin"], body=["kombi"])
@@ -90,6 +91,25 @@ def test_bazos_search_filters_model_country_body_fuel():
     assert (l.model_key, l.body, l.fuel, l.engine_cc, l.price_czk) == (
         "skoda:octavia", "kombi", "benzin", 1600, 150000)
     assert result.complete is False and not l.has_details
+
+
+def test_bazos_unstated_body_kept_when_every_body_of_the_model_fits():
+    c, _ = bazos_with({"/skoda/": bazos_page(
+        bazos_item("1", "Škoda Octavia 3 Combi 1.6 MPI"),
+        bazos_item("2", "Škoda Octavia 1.6 MPI"),             # liftback or combi
+        bazos_item("3", "Škoda Octavia 1.6 MPI hatchback"),   # says so, not wanted
+    )})
+    profile = SearchProfile(name="p", models=["skoda:octavia"], body=["kombi", "liftback"])
+    assert [l.source_id for l in c.search(profile).listings] == ["1", "2"]
+
+
+def test_bazos_body_hint_from_model_specific_title_word():
+    c, _ = bazos_with({"/seat/": bazos_page(
+        bazos_item("1", "Seat Leon ST 1.4 TSI"),
+        bazos_item("2", "Seat Leon 1.4 TSI", "6 st. manuál"),   # hint is title-only
+    )})
+    profile = SearchProfile(name="p", models=["seat:leon"], body=["kombi"])
+    assert [(l.source_id, l.body) for l in c.search(profile).listings] == [("1", "kombi")]
 
 
 def test_bazos_model_order_golf_variant_before_golf():
@@ -242,13 +262,17 @@ def test_dwa_parse_and_params():
 
 def test_dwa_one_request_per_model_and_fetch_by_id():
     seen = []
+    OTHER = {**DWA_ITEM, "id": {"fiveDigitsDealerId": "99999", "fiveDigitsVehicleId": "99999"}}
 
     def handler(request):
         params = dict(request.url.params)
         seen.append(params)
         if "vehicleIds" in params:
-            content = [DWA_ITEM] if params["vehicleIds"] == "0202800435" else []
-            return httpx.Response(200, json={"count": len(content), "resultListPage": {"content": content}})
+            # A gone car still gets a page of other cars, but count 0.
+            count = int(params["vehicleIds"] == "0202800435")
+            return httpx.Response(200, json={"count": count, "resultListPage": {"content": [DWA_ITEM]}})
+        if params["models"] == "vw-golf-variant-8-fl":
+            return httpx.Response(200, json={"count": 0, "resultListPage": {"content": [OTHER]}})
         return httpx.Response(200, json={"count": 1, "resultListPage": {"content": [DWA_ITEM]}})
 
     c = DasWeltAutoCollector(HTTP, CollectionSettings(), {"models": {

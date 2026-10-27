@@ -15,12 +15,24 @@ skodaplus:
   # Model key -> make and model names exactly as skodaplus.cz shows them.
   models:
     skoda:octavia:           {make: Škoda, models: [Octavia, Octavia Combi]}
+    skoda:superb:            {make: Škoda, models: [Superb]}
+    skoda:rapid:             {make: Škoda, models: [Rapid]}
+    seat:leon:               {make: Seat, models: [Leon, Leon ST]}
+    seat:toledo:             {make: Seat, models: [Toledo]}
+    honda:civic:             {make: Honda, models: [Civic]}
+    honda:accord:            {make: Honda, models: [Accord]}
+    dacia:logan:             {make: Dacia, models: [Logan, Logan MCV]}
     volkswagen:golf:         {make: Volkswagen, models: [Golf]}
     volkswagen:golf-variant: {make: Volkswagen, models: [Golf Variant]}
+    volkswagen:passat:       {make: Volkswagen, models: [Passat]}
+    volkswagen:passat-variant: {make: Volkswagen, models: [Passat Variant]}
+    mazda:6:                 {make: Mazda, models: ['6']}
     ford:focus:              {make: Ford, models: [Focus]}
     toyota:auris:            {make: Toyota, models: [Auris]}
     toyota:avensis:          {make: Toyota, models: [Avensis]}
+    toyota:corolla:          {make: Toyota, models: [Corolla]}
     hyundai:i30:             {make: Hyundai, models: [i30, i30 CW]}
+    hyundai:i40:             {make: Hyundai, models: [i40]}
     kia:cee-d:               {make: KIA, models: [Ceed]}
     kia:cee-d-sw:            {make: KIA, models: [Ceed SW]}
     opel:astra:              {make: Opel, models: [Astra, Astra Sport Tourer]}
@@ -32,11 +44,21 @@ dasweltauto:
   # Model key -> brand and model values from dasweltauto.cz's filter (one request each).
   models:
     skoda:octavia:           {brand: skoda, models: [skoda-octavia]}
+    skoda:superb:            {brand: skoda, models: [skoda-superb]}
+    skoda:rapid:             {brand: skoda, models: [skoda-rapid]}   # Spaceback is separate
+    seat:leon:               {brand: seat, models: [seat-leon, seat-leon-st]}
+    seat:toledo:             {brand: seat, models: [seat-toledo]}
+    honda:civic:             {brand: honda, models: [honda-civic]}
+    dacia:logan:             {brand: dacia, models: [dacia-logan]}
     volkswagen:golf:         {brand: vw, models: [vw-golf]}
     volkswagen:golf-variant: {brand: vw, models: [vw-golf-variant, vw-golf-variant-8-fl]}
+    volkswagen:passat:       {brand: vw, models: [vw-passat]}
+    volkswagen:passat-variant: {brand: vw, models: [vw-passat-variant]}
+    mazda:6:                 {brand: mazda, models: [mazda-6]}
     ford:focus:              {brand: ford, models: [ford-focus]}
     toyota:auris:            {brand: toyota, models: [toyota-auris]}
     hyundai:i30:             {brand: hyundai, models: [hyundai-i30]}
+    hyundai:i40:             {brand: hyundai, models: [hyundai-i40]}
     kia:cee-d:               {brand: kia, models: [kia-ceed]}
     kia:cee-d-sw:            {brand: kia, models: [kia-ceed-sw]}
     opel:astra:              {brand: opel, models: [opel-astra]}
@@ -48,11 +70,20 @@ louda:
   # Model key -> make and model names exactly as autolouda.cz's filter shows them.
   models:
     skoda:octavia:           {make: Škoda, models: [OCTAVIA]}
+    skoda:superb:            {make: Škoda, models: [SUPERB]}
+    skoda:rapid:             {make: Škoda, models: [RAPID]}
+    seat:leon:               {make: Seat, models: [LEON, LEON ST]}
+    seat:toledo:             {make: Seat, models: [TOLEDO]}
+    honda:civic:             {make: Honda, models: [CIVIC]}
     volkswagen:golf:         {make: Volkswagen, models: [GOLF]}
     volkswagen:golf-variant: {make: Volkswagen, models: [GOLF VARIANT]}
+    volkswagen:passat:       {make: Volkswagen, models: [PASSAT]}
+    volkswagen:passat-variant: {make: Volkswagen, models: [PASSAT VARIANT]}
+    mazda:6:                 {make: Mazda, models: ['6']}
     ford:focus:              {make: Ford, models: [FOCUS]}
     toyota:auris:            {make: Toyota, models: [AURIS]}
     toyota:avensis:          {make: Toyota, models: [AVENSIS]}
+    toyota:corolla:          {make: Toyota, models: [COROLLA]}
     hyundai:i30:             {make: Hyundai, models: [I30, I30 COMBI]}
     kia:cee-d:               {make: Kia, models: [CEED]}   # includes the SW
     opel:astra:              {make: Opel, models: [ASTRA]}
@@ -62,10 +93,15 @@ klokocka:
   # server-rendered pages. No VINs published.
   enabled: true
   # Model key -> brand/model path from autoklokocka.cz URLs (/nabidka-vozu/znacka:X/model:Y).
+  # An unknown model returns the whole brand, so only map models seen on the site.
   models:
     skoda:octavia:           {brand: skoda, model: octavia}
+    skoda:superb:            {brand: skoda, model: superb}
+    skoda:rapid:             {brand: skoda, model: rapid}
     volkswagen:golf:         {brand: volkswagen, model: golf}
     volkswagen:golf-variant: {brand: volkswagen, model: golf}
+    volkswagen:passat:       {brand: volkswagen, model: passat}
+    volkswagen:passat-variant: {brand: volkswagen, model: passat}
     kia:cee-d:               {brand: kia, model: ceed}
     hyundai:i30:             {brand: hyundai, model: i30}
     ford:focus:              {brand: ford, model: focus}
@@ -86,14 +122,27 @@ bazos:
   # Within a category the first matching entry wins, so list specific ones first.
   # Estates are recognised from keywords (combi, kombi, variant, sw, touring, tourer,
   # caravan...); listings that don't say what body they are can't be told apart from
-  # hatchbacks, so they are skipped when a profile requires a body type.
+  # hatchbacks, so they are skipped when a profile requires a body type, unless every
+  # body in `bodies` (what the model comes in, in the years profiles search) is acceptable.
+  # `body_hints` name a body from model-specific title words (Leon ST, Logan MCV).
   models:
-    skoda:octavia:           {category: skoda, title: '\boctavi'}
+    skoda:octavia:           {category: skoda, title: '\boctavi', bodies: [kombi, liftback]}
+    skoda:superb:            {category: skoda, title: '\bsuperb\b', bodies: [kombi, liftback]}
+    skoda:rapid:             {category: skoda, title: '\brapid\b', bodies: [liftback, hatchback]}
     volkswagen:golf-variant: {category: volkswagen, title: '\bgolf\b.*\bvariant\b'}
     volkswagen:golf:         {category: volkswagen, title: '\bgolf\b(?!\s*(plus|sportsvan|\+))'}
+    volkswagen:passat:       {category: volkswagen, title: '\bpassat\b(?!\s*cc\b)'}
     ford:focus:              {category: ford, title: '\bfocus\b(?!.*c-?max)'}
     toyota:auris:            {category: toyota, title: '\bauris\b'}
     toyota:avensis:          {category: toyota, title: '\bavensis\b'}
+    toyota:corolla:          {category: toyota, title: '\bcorolla\b'}
     hyundai:i30:             {category: hyundai, title: '\bi30\b'}
+    hyundai:i40:             {category: hyundai, title: '\bi40\b'}
     kia:cee-d:               {category: kia, title: "\\bce{1,2}['´`-]?e?d\\b"}
-    opel:astra:              {category: opel, title: '\bastra\b'}
+    opel:astra:              {category: opel, title: '\bastra\b', body_hints: {kombi: '\bst\b'}}
+    mazda:6:                 {category: mazda, title: '\bmazda\s*6\b(?![.,]\d)'}
+    seat:leon:               {category: seat, title: '\bleon\b', body_hints: {kombi: '\bst\b|sportstourer'}}
+    seat:toledo:             {category: seat, title: '\btoledo\b', bodies: [liftback]}
+    honda:civic:             {category: honda, title: '\bcivic\b'}
+    honda:accord:            {category: honda, title: '\baccord\b'}
+    dacia:logan:             {category: dacia, title: '\blogan\b', body_hints: {kombi: '\bmcv\b'}}

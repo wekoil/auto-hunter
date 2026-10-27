@@ -304,4 +304,6 @@ def load_config(config_dir: Path) -> Config:
                 raise ValueError(f"sources.yaml {name}: model {key!r} must be 'make:model'")
             if "title" in mapping:
                 re.compile(mapping["title"])
+            for pattern in (mapping.get("body_hints") or {}).values():
+                re.compile(pattern)
     return Config(settings, requirements, catalog, evaluation, profiles, sources)

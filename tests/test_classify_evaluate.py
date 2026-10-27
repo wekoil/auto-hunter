@@ -65,7 +65,7 @@ def test_octavia2_title_hint_not_confused_by_displacement():
 
 
 def test_uncataloged_model():
-    cls = classify(car("toyota:auris", 2015, "Toyota Auris 1.6 Valvematic"), CATALOG)
+    cls = classify(car("opel:astra", 2015, "Opel Astra Sports Tourer 1.4 Turbo"), CATALOG)
     assert not cls.cataloged_model and cls.engine_known
 
 
@@ -111,10 +111,11 @@ def test_profile_resolution():
     a = PROFILES["A-octavia3-1.6mpi"]
     assert a.models == ["skoda:octavia"]
     assert (a.year_min, a.year_max, a.price_max, a.fuel, a.body) == (
-        2013, 2020, 200000, ["benzin"], ["kombi"])
+        2013, 2020, 200000, ["benzin", "hybridni"],
+        ["kombi", "liftback", "hatchback", "sedanlimuzina"])
     assert "havarovan" in a.exclude_keywords and a.price_min == 20000
     b = PROFILES["B-golf-variant-1.6mpi"]
-    assert b.models == ["volkswagen:golf", "volkswagen:golf-variant"]
+    assert b.models == ["volkswagen:golf", "volkswagen:golf-variant"] and b.body == ["kombi"]
 
 
 def codes(a):
@@ -141,7 +142,7 @@ def test_assess_flags_risks_and_uncertainty():
 
 
 def test_assess_exploratory_model():
-    l = car("toyota:auris", 2015, "Toyota Auris Touring Sports 1.6", price_czk=95_000)
+    l = car("opel:astra", 2015, "Opel Astra Sports Tourer 1.6", price_czk=95_000)
     a = assess(l, classify(l, CATALOG), CATALOG, CONFIG.evaluation)
     assert "engine_unvetted" in codes(a) and a.price_tier == "budget"
 

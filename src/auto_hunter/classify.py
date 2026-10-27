@@ -18,7 +18,7 @@ POWER_TOLERANCE_KW = 3
 
 _LITERS_RE = re.compile(r"(?<![\d.,])([0-3])[.,](\d)(?!\d)")
 _KW_RE = re.compile(r"\b(\d{2,3})\s*kw\b")
-_TURBO_RE = re.compile(r"tsi|tfsi|turbo|ecoboost|ecob\b|t-?gdi|\btjet\b")
+_TURBO_RE = re.compile(r"tsi|tfsi|turbo|ecoboost|ecob\b|t-?gdi|\btjet\b|\btce\b")
 _NA_RE = re.compile(r"\bmpi\b|ti-?vct|cvvt|vvt-?i|valvematic|\bfsi\b")
 
 

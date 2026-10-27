@@ -1,8 +1,12 @@
 # Layer 1: global requirements. Apply to every profile; a profile may only narrow them
 # (price_max, mileage_max, exclude_keywords can be overridden per profile).
 
-fuel: [benzin]            # petrol only (Sauto "hybridni" is a separate fuel type)
-body: [kombi]             # estate; note Sauto also tags MPVs as kombi, so profiles pick models
+# Petrol, and petrol hybrids (Sauto "hybridni" is a separate fuel type; few fit the budget).
+fuel: [benzin, hybridni]
+# Estate or liftback, no sedans. Sauto also tags MPVs as kombi, so profiles pick models.
+# Profiles of models with no liftback narrow this to [kombi]: Louda only filters
+# "Hatchback/liftback" as one group, so liftback would let hatchbacks in there.
+body: [kombi, liftback]
 price_max: 200000         # extended budget; see price tiers in evaluation.yaml
 # Below this it's a part, a down payment or a wreck, not a car you'd buy (mostly Bazoš).
 price_min: 20000
@@ -11,9 +15,9 @@ price_min: 20000
 mileage_max: 250000
 # Matched at word starts in the title, case/diacritics-insensitive, so a stem covers
 # all endings ("bouran" → bouraný, bouraná). Groups: damage; wanted-to-buy ads;
-# financing bait whose "price" is a down payment.
+# financing bait whose "price" is a down payment; sold cars left online.
 exclude_keywords: [
   "havarovan", "bouran", "na díly", "poškozen", "bez stk", "nepojízdn",
   "koupím", "vykoupím", "výkup", "poptávám",
-  "bez registr",
+  "bez registr", "prodáno",
 ]

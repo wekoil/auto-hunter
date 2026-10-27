@@ -57,11 +57,12 @@ _FUEL_LABELLED = re.compile(r"palivo\s*:?\s*([a-z()-]+)")
 _C = r"(?<![a-z])"
 _FUEL_WORDS = [
     ("lpg-benzin", r"\blpg\b"),
-    ("cng-benzin", r"\bcng\b|g-tec"),
+    ("cng-benzin", r"\bcng\b|g-tec|\btgi\b"),
     ("hybridni", r"hybrid"),
     ("elektro", r"\belektro(?:mobil)?\b|\belektricky pohon\b"),
     ("nafta", rf"\bnafta\b|diesel|{_C}tdi\b|{_C}tdci\b|{_C}crdi\b|{_C}cdti\b|{_C}hdi\b"
-              rf"|{_C}dci\b|d-4d|{_C}jtd|multijet|{_C}cdi\b"),
+              rf"|{_C}dci\b|d-4d|{_C}jtd|multijet|{_C}cdi\b|skyactiv-?d\b|i-?dtec"
+              rf"|\b\d[.,]\d\s*d\b"),   # "2.2 D", "1.6D"
     ("benzin", rf"benzin|{_C}tsi\b|{_C}tfsi\b|{_C}mpi\b|{_C}fsi\b|ti-?vct|ecoboost|vvt-?i"
                rf"|valvematic|{_C}gdi\b|{_C}t-gdi\b|{_C}cvvt\b"),
 ]
@@ -74,7 +75,7 @@ _MANUAL = re.compile(r"\bmanual(?:ni|na)?" + _NOT_AIRCON)
 
 # No bare "st" for Astra ST: "6 st. manual" (6-speed) would turn every car into an estate.
 _BODY_WORDS = [
-    ("kombi", r"\bkombi\b|\bcombi\b|\bvariant\b|\bsw\b|touring|\btourer\b|\bcaravan\b|\bestate\b|\bavant\b|\bcw\b"),
+    ("kombi", r"\bkombi\b|\bcombi\b|\bvariant\b|\bsw\b|touring|\btourer\b|\bcaravan\b|\bestate\b|\bavant\b|\bcw\b|\bwagon\b"),
     ("liftback", r"\bliftback\b"),
     ("hatchback", r"\bhatchback\b|\bhb\b"),
     ("sedanlimuzina", r"\bsedan\b|\blimuzina\b"),

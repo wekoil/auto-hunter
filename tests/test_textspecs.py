@@ -51,6 +51,9 @@ def test_mileage(text, km):
     ("2.0 TDI 110kW", "nafta"),
     # Code glued to the displacement.
     ("Kia Ceed 1.6CRDi 100kW", "nafta"),
+    ("Mazda 6 2.2 D GJ Combi", "nafta"),
+    ("Mazda 6 combi skyactiv-D 129kW", "nafta"),
+    ("Opel Astra Sport Tourer 1.6D 81kw", "nafta"),
     ("Vw Golf 6 variant 1.6tdi 77kw", "nafta"),
     ("Octavia 1.4tsi 110kw", "benzin"),
     ("1.6 MPI + LPG, benzín", "lpg-benzin"),
